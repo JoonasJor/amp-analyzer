@@ -6,6 +6,9 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import pyperclip
+from io import StringIO
 
 class MyMainWindow(QMainWindow):
     data_index = 0
@@ -57,13 +60,13 @@ class MyMainWindow(QMainWindow):
     def handle_data(self, name, concentration, notes):
         data = self.parse_clipboard_data()
 
-        if not data:
+        if data is None:
             QMessageBox.warning(self, "No Data", "Clipboard does not contain any data.")
             return
 
         try:
-            times = [data_point["time/s"] for data_point in data]
-            currents = [data_point["current/µA"] for data_point in data]
+            times = data['time/s']
+            currents = data['current/µA']
         except Exception as e: 
             QMessageBox.warning(self, "Error", "Data is in wrong format.")
             print(e)
@@ -75,27 +78,16 @@ class MyMainWindow(QMainWindow):
 
 
     def parse_clipboard_data(self):
-        clipboard = QApplication.clipboard()
-        clipboard_text = clipboard.text()
+        # Read data from clipboard
+        clipboard_data = pyperclip.paste()
 
-        if not clipboard_text:
+        if not clipboard_data:
             return
         
-        data_list = []
-        lines = clipboard_text.split('\n')
-        headers = lines[0].strip().split('\t')
-        for line in lines[1:]:
-            if line.strip():
-                values = line.strip().split('\t')
-                data_entry = {}
-                for header, value in zip(headers, values):
-                    data_entry[header] = value
-                data_list.append(data_entry)
+        # Parse clipboard data into a DataFrame
+        data_frame = pd.read_csv(StringIO(clipboard_data), sep='\t')
 
-        #for data_entry in data_list:
-            #print(f"Data: {data_entry}")
-
-        return data_list
+        return data_frame
 
 class PlotCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100): 
