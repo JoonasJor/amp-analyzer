@@ -27,7 +27,7 @@ class MyMainWindow(QMainWindow):
         navigation_toolbar = NavigationToolbar(self.canvas, self)
         self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, navigation_toolbar)
 
-        #self.on_button_add_dataset_clicked()
+        self.on_button_add_dataset_clicked()
 
     def on_button_add_dataset_clicked(self):
         line_edit_name = QLineEdit(self)
@@ -82,7 +82,7 @@ class MyMainWindow(QMainWindow):
         clipboard_data = pyperclip.paste()
 
         if not clipboard_data:
-            return
+            return None
         
         # Parse clipboard data into a DataFrame
         data_frame = pd.read_csv(StringIO(clipboard_data), sep='\t')
