@@ -1,33 +1,31 @@
-import matplotlib.pyplot as plt
 import pandas as pd
-import pyperclip
-from io import StringIO
+import matplotlib.pyplot as plt
 
-def plot_data_from_clipboard():
-    # Read data from clipboard
-    clipboard_data = pyperclip.paste()
+import pandas as pd
 
-    # Parse clipboard data into a DataFrame
-    df = pd.read_csv(StringIO(clipboard_data), sep='\t')
+csv_file = "testitesti.csv"
 
-    # Plot the data
-    plt.plot(df['time/s'], df['current/µA'], label='Current')
-    
-    # Set title and legend and turn on grid
-    plt.title('Matplotlib Plot')
-    plt.legend()
-    plt.grid(True)
+# Read the CSV file into a DataFrame
+df = pd.read_csv(csv_file, encoding="utf-16", header=5)
 
-    # Set labels for axes
-    plt.ylabel("current/µA")
-    plt.xlabel("time/s")
 
-    # Set number of ticks on the x and y axes
-    plt.gca().xaxis.set_major_locator(plt.MaxNLocator(10))
-    plt.gca().yaxis.set_major_locator(plt.MaxNLocator(10))
+# Plot time vs. current for each channel
+for i in range(8):
+    if i  == 0:
+        current_column = "µA"
+    else:
+        current_column = f"µA.{i}"
+    plt.plot(df["s"], df[current_column], label=f"Channel {i}")
 
-    plt.show()
+# Add labels and legend
+plt.xlabel("Time")
+plt.ylabel("Current (µA)")
+plt.title("Current vs. Time for Each Channel")
+plt.legend()
 
-# Example usage:
-if __name__ == "__main__":
-    plot_data_from_clipboard()
+axes = plt.gca()
+axes.xaxis.set_major_locator(plt.MaxNLocator(10))
+axes.yaxis.set_major_locator(plt.MaxNLocator(10))
+
+# Show plot
+plt.show()
