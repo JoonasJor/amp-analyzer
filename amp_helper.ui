@@ -116,8 +116,47 @@
      <height>22</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionImport_data_from_CSV"/>
+    <addaction name="actionImport_data_from_xlsx"/>
+   </widget>
+   <widget class="QMenu" name="menuee">
+    <property name="title">
+     <string>Options</string>
+    </property>
+    <addaction name="actionee"/>
+    <addaction name="actionAutomatic_Import"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuee"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionImport_data_from_CSV">
+   <property name="text">
+    <string>Import data from CSV</string>
+   </property>
+  </action>
+  <action name="actionImport_data_from_xlsx">
+   <property name="text">
+    <string>Import data from XLSX</string>
+   </property>
+  </action>
+  <action name="actionee">
+   <property name="text">
+    <string>Layout</string>
+   </property>
+  </action>
+  <action name="actionAutomatic_Import">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Automatic Import</string>
+   </property>
+  </action>
  </widget>
  <resources/>
  <connections/>
