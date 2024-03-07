@@ -5,6 +5,7 @@ from PyQt6.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
+from matplotlib.widgets import RectangleSelector, SpanSelector
 import numpy as np
 import pandas as pd
 import pyperclip
@@ -20,6 +21,10 @@ class MyMainWindow(QMainWindow):
 
         self.pushButton_add_dataset.clicked.connect(self.on_button_add_dataset_clicked)
 
+        # Bidirectional connection for plot seconds slider and lineEdit
+        self.horizontalSlider_plot_seconds.valueChanged.connect(lambda value, le=self.lineEdit_plot_seconds: le.setText(str(value)))
+        self.lineEdit_plot_seconds.editingFinished.connect(lambda: self.horizontalSlider_plot_seconds.setValue(int(self.lineEdit_plot_seconds.text())))
+
         self.canvas = PlotCanvas(self.plotWidget)
         layout = QVBoxLayout(self.plotWidget)
         layout.addWidget(self.canvas)
@@ -28,10 +33,6 @@ class MyMainWindow(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, navigation_toolbar)
 
         self.on_button_add_dataset_clicked()
-
-        # Bidirectional connection for plot seconds slider and lineEdit
-        self.horizontalSlider_plot_seconds.valueChanged.connect(lambda value, le=self.lineEdit_plot_seconds: le.setText(str(value)))
-        self.lineEdit_plot_seconds.editingFinished.connect(lambda: self.horizontalSlider_plot_seconds.setValue(int(self.lineEdit_plot_seconds.text())))
 
     def on_button_add_dataset_clicked(self):
         line_edit_name = QLineEdit(self)
@@ -99,7 +100,25 @@ class PlotCanvas(FigureCanvas):
         super().__init__(self.figure)
         self.setParent(parent)
         self.datasets = {}  # Dictionary to store datasets
+        self.span = None
+        self.span_initialized = False
 
+
+    def onselect(self, vmin, vmax):
+        print("span:", self.span.extents)
+
+    def create_span_selector(self, snaps):
+        self.span = SpanSelector(self.axes, 
+                                 self.onselect,
+                                 'horizontal', 
+                                 useblit=True, # For faster canvas updates
+                                 interactive=True, # Allow resizing by dragging from edges
+                                 drag_from_anywhere=True, # Allow moving by dragging
+                                 props=dict(alpha=0.2, facecolor="tab:blue"), # Visuals
+                                 ignore_event_outside=True, # Keep the span displayed after interaction
+                                 grab_range=6,
+                                 snap_values=snaps) # Snap to time values  
+        
     def add_dataset(self, label, x, y):
         # Add a new dataset or update existing one
         self.datasets[label] = (x, y)
@@ -128,6 +147,16 @@ class PlotCanvas(FigureCanvas):
         self.axes.yaxis.set_major_locator(plt.MaxNLocator(10))
 
         self.draw()
+
+        # Set initial span coords
+        if not self.span_initialized: 
+            self.create_span_selector(x) # Time values from first dataset
+            last_value = max(x)
+            span_right = last_value
+            span_left = round(float(last_value) * 0.9, ndigits=1)
+            self.span.extents = (span_left, span_right)
+            self.span_initialized = True
+            print(self.span.extents)
 
 def main():
     app = QApplication(sys.argv)
