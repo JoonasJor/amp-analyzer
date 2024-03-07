@@ -29,6 +29,10 @@ class MyMainWindow(QMainWindow):
 
         self.on_button_add_dataset_clicked()
 
+        # Bidirectional connection for plot seconds slider and lineEdit
+        self.horizontalSlider_plot_seconds.valueChanged.connect(lambda value, le=self.lineEdit_plot_seconds: le.setText(str(value)))
+        self.lineEdit_plot_seconds.editingFinished.connect(lambda: self.horizontalSlider_plot_seconds.setValue(int(self.lineEdit_plot_seconds.text())))
+
     def on_button_add_dataset_clicked(self):
         line_edit_name = QLineEdit(self)
         line_edit_name.setText(f"Data {self.data_index}")
@@ -95,7 +99,6 @@ class PlotCanvas(FigureCanvas):
         super().__init__(self.figure)
         self.setParent(parent)
         self.datasets = {}  # Dictionary to store datasets
-        #self.draw_plot()
 
     def add_dataset(self, label, x, y):
         # Add a new dataset or update existing one
@@ -119,22 +122,12 @@ class PlotCanvas(FigureCanvas):
         # Set labels for axes
         self.axes.set_ylabel("current/µA")
         self.axes.set_xlabel("time/s")
-
-        '''Set y-axis limits to the closest integers
-        y_values = [float(val) for _, y in self.datasets.values() for val in y]
-        min_y = round(min(y_values) - 1)
-        max_y = round(max(y_values) + 1)
-        print((min_y, max_y))
-        #self.axes.set_ylim([min_y, max_y])
-        #self.axes.set_ylim(bottom=-25)'''
         
         # Set number of ticks on the x and y axes
         self.axes.xaxis.set_major_locator(plt.MaxNLocator(10))
         self.axes.yaxis.set_major_locator(plt.MaxNLocator(10))
 
         self.draw()
-
-        print(self.datasets.keys())
 
 def main():
     app = QApplication(sys.argv)
