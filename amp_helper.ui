@@ -121,7 +121,7 @@
     </property>
     <layout class="QVBoxLayout" name="verticalLayout_toolbox"/>
    </widget>
-   <widget class="QWidget" name="">
+   <widget class="QWidget" name="layoutWidget">
     <property name="geometry">
      <rect>
       <x>1490</x>
@@ -200,6 +200,7 @@
     </property>
     <addaction name="actionImport_data_from_CSV"/>
     <addaction name="actionImport_data_from_xlsx"/>
+    <addaction name="actionImport_data_from_PSSESSION"/>
    </widget>
    <widget class="QMenu" name="menuee">
     <property name="title">
@@ -233,6 +234,11 @@
    </property>
    <property name="text">
     <string>Automatic Import</string>
+   </property>
+  </action>
+  <action name="actionImport_data_from_PSSESSION">
+   <property name="text">
+    <string>Import data from PSSESSION</string>
    </property>
   </action>
  </widget>
