@@ -14,19 +14,6 @@
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QPushButton" name="pushButton_add_dataset">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>50</y>
-      <width>111</width>
-      <height>61</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Add dataset</string>
-    </property>
-   </widget>
    <widget class="QWidget" name="verticalLayoutWidget">
     <property name="geometry">
      <rect>
@@ -184,6 +171,38 @@
      </item>
     </layout>
    </widget>
+   <widget class="QWidget" name="">
+    <property name="geometry">
+     <rect>
+      <x>30</x>
+      <y>20</y>
+      <width>158</width>
+      <height>82</height>
+     </rect>
+    </property>
+    <layout class="QGridLayout" name="gridLayout">
+     <item row="0" column="0">
+      <widget class="QPushButton" name="pushButton_dataspace_add">
+       <property name="text">
+        <string>Add</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QPushButton" name="pushButton_dataspace_remove">
+       <property name="text">
+        <string>Remove</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0" colspan="2">
+      <widget class="QLineEdit" name="lineEdit_dataspace"/>
+     </item>
+     <item row="2" column="0" colspan="2">
+      <widget class="QComboBox" name="comboBox_dataspace"/>
+     </item>
+    </layout>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
@@ -208,6 +227,7 @@
     </property>
     <addaction name="actionee"/>
     <addaction name="actionAutomatic_Import"/>
+    <addaction name="actionDebug_Info"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuee"/>
@@ -239,6 +259,17 @@
   <action name="actionImport_data_from_PSSESSION">
    <property name="text">
     <string>Import data from PSSESSION</string>
+   </property>
+  </action>
+  <action name="actionDebug_Info">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Debug Info</string>
    </property>
   </action>
  </widget>
