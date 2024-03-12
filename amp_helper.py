@@ -16,29 +16,39 @@ from io import StringIO
 class MyMainWindow(QMainWindow):
     widget_id = 0
     dataset_widgets = {} # {1: (name1, concentration1, notes1), 2: (name2, concentration2, notes2), ...}
+    button_add_dataset = None
 
     def __init__(self):
         super().__init__()
         loadUi("amp_helper.ui", self)
-
-        self.pushButton_add_dataset.clicked.connect(lambda: self.add_dataset_widget())
-        self.actionImport_data_from_CSV.triggered.connect(self.on_import_data_from_csv_clicked)
-        self.actionImport_data_from_PSSESSION.triggered.connect(self.on_import_data_from_pssession_clicked)
-
-        # Bidirectional connection for plot seconds slider and lineEdit
-        self.horizontalSlider_plot_seconds.valueChanged.connect(lambda value, le=self.lineEdit_plot_seconds: le.setText(str(value)))
-        self.lineEdit_plot_seconds.editingFinished.connect(lambda: self.horizontalSlider_plot_seconds.setValue(int(self.lineEdit_plot_seconds.text())))
 
         self.canvas = PlotCanvas(self.plotWidget)
         layout = QVBoxLayout(self.plotWidget)
         layout.addWidget(self.canvas)
         layout.setContentsMargins(2, 2, 2, 2)
 
+        #self.pushButton_add_dataset.clicked.connect(lambda: self.add_dataset_widget())
+        self.actionImport_data_from_CSV.triggered.connect(self.on_import_data_from_csv_clicked)
+        self.actionImport_data_from_PSSESSION.triggered.connect(self.on_import_data_from_pssession_clicked)
+        self.actionDebug_Info.triggered.connect(self.canvas.toggle_debug_info)
+
+        # Bidirectional connection for plot seconds slider and lineEdit
+        self.horizontalSlider_plot_seconds.valueChanged.connect(lambda value, le=self.lineEdit_plot_seconds: le.setText(str(value)))
+        self.lineEdit_plot_seconds.editingFinished.connect(lambda: self.horizontalSlider_plot_seconds.setValue(int(self.lineEdit_plot_seconds.text())))
+
         navigation_toolbar = NavigationToolbar(self.canvas, self)
         #navigation_toolbar.setStyleSheet("QToolBar { border: 0px; }")
         self.verticalLayout_toolbox.addWidget(navigation_toolbar)
 
-        #self.add_dataset_widget()
+        #button_add_dataset.raise_()
+        #hbox = QHBoxLayout()
+        #hbox.addWidget(button_add_dataset)
+        #bottom_layout.raise_()
+        #self.verticalLayout_datasets.addWidget(button_add_dataset)
+        #self.verticalLayout_datasets.setAlignment(Qt.AlignmentFlag.AlignTop)
+        #self.verticalLayout_datasets.setAlignment(hbox, Qt.AlignmentFlag.AlignBottom)
+
+        self.add_dataset_widget()
 
     def add_dataset_widget(self, name = None):
         id = self.widget_id
@@ -65,7 +75,7 @@ class MyMainWindow(QMainWindow):
         # Connect button click to handle_clipboard_data function
         button_paste = QPushButton("Paste Data", self)
         button_paste.clicked.connect(lambda: self.handle_clipboard_data(id))
-                                     
+
         hbox = QHBoxLayout()
         hbox.addWidget(checkbox_toggle_active)
         hbox.addWidget(line_edit_name)
@@ -76,6 +86,11 @@ class MyMainWindow(QMainWindow):
         # Add hbox to parent layout
         self.verticalLayout_datasets.addLayout(hbox)
         self.verticalLayout_datasets.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self.verticalLayout_datasets.removeWidget(self.button_add_dataset)
+        self.button_add_dataset = QPushButton("Add Dataset", self)
+        self.button_add_dataset.clicked.connect(lambda: self.add_dataset_widget())
+        self.verticalLayout_datasets.addWidget(self.button_add_dataset)
 
         # Store references to the widgets for later access
         self.dataset_widgets[id] = {
@@ -223,10 +238,16 @@ class PlotCanvas(FigureCanvas):
         super().__init__(self.figure)
         self.setParent(parent)
 
+        self.show_debug_info = True
         self.span = None
         self.span_initialized = False
         self.datasets = {}  # {"0": {"times":[1,2,3], "currents":[1,2,3], "concentration":1, "notes":"foobar"}, "1": ..."}
         self.hidden_datasets = {}  # {"0": {"times":[1,2,3], "currents":[1,2,3], "concentration":1, "notes":"foobar"}, "1": ..."}
+
+    def toggle_debug_info(self):
+        self.show_debug_info = not self.show_debug_info
+        self.draw_plot()
+        print(f"debug info: {self.show_debug_info}")
 
     def onselect(self, vmin, vmax):
         print("span:", self.span.extents)
@@ -316,6 +337,7 @@ class PlotCanvas(FigureCanvas):
         print(f"RAW: {concentration_data}")
 
         if len(concentration_data) < 2:
+            self.axes2.clear()
             info_text = "Add atleast 2 different concentrations"
             self.axes2.text(0.5, 0.5, info_text, fontsize=10, horizontalalignment="center", verticalalignment="center", transform=self.axes2.transAxes)
             return
@@ -328,10 +350,6 @@ class PlotCanvas(FigureCanvas):
         concentrations, calculated_currents = zip(*sorted_concentration_data)
         avg_currents, std_currents = zip(*calculated_currents)
 
-        print(f"CALCULATED: {sorted_concentration_data}")
-        print(f"AVGS: {avg_currents}")
-        print(f"STDS: {std_currents}")
-
         # Perform linear regression to get slope, intercept, and R-squared
         slope, intercept = np.polyfit(concentrations, avg_currents, 1)
         r_squared = np.corrcoef(concentrations, avg_currents)[0, 1]**2
@@ -340,14 +358,18 @@ class PlotCanvas(FigureCanvas):
         # Clear existing plot
         self.axes2.clear()
 
+        if self.show_debug_info:
+            self.draw_debug_box(concentrations, avg_currents, std_currents, slope, intercept, trendline)
+            #print(sorted_concentration_data)
+
         # Display the equation
         equation_text = f"y = {slope:.4f}x + {intercept:.4f}"
         r_squared_text = f"R² = {r_squared:.4f}"
-        self.axes2.text(0.2, 0.2, 
+        self.axes2.text(0.1, 0.2, 
                         f"{equation_text}\n{r_squared_text}", 
                         fontsize=12, 
                         bbox=dict(facecolor="orange", alpha=0.3), 
-                        horizontalalignment="center", verticalalignment="center", 
+                        horizontalalignment="left", verticalalignment="center", 
                         transform=self.axes2.transAxes)
 
         # Plot the data
@@ -390,7 +412,20 @@ class PlotCanvas(FigureCanvas):
         if len(self.datasets) > 1: 
             self.plot_results()
         self.draw()
-
+    
+    def draw_debug_box(self, concentrations, avg_currents, std_currents, slope, intercept, trendline):
+        concentrations_text = f"CONCENTRATIONS: {concentrations}"
+        avgs_text = f"AVGS: {np.round(avg_currents, decimals=5)}"
+        stds_text = f"STDS: {np.round(std_currents, decimals=5)}"
+        slope_text = f"SLOPE: {slope}"
+        intercept_text = f"INTERCEPT: {intercept}"
+        trendline_text = f"TRENDLINE: {np.round(trendline, decimals=5)}"
+        self.axes2.text(0.1, 0.1, 
+                        f"{concentrations_text}\n{avgs_text}\n{stds_text}\n{slope_text}\n{intercept_text}\n{trendline_text}", 
+                        fontsize=8, 
+                        bbox=dict(facecolor="blue", alpha=0.2), 
+                        horizontalalignment="left", verticalalignment="center", 
+                        transform=self.axes2.transAxes)
 def main():
     app = QApplication(sys.argv)
     window = MyMainWindow()
