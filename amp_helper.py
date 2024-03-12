@@ -295,10 +295,7 @@ class PlotCanvas(FigureCanvas):
         self.span_initialized = True
         
     def plot_results(self):
-        #avg_currents = []
-        #concentrations = []
         concentration_data = {}
-
         # Iterate over each dataset
         for label, data in self.datasets.items():
             # Convert lists to numpy arrays
@@ -316,23 +313,54 @@ class PlotCanvas(FigureCanvas):
                 concentration_data[concentration].append(avg_current)
             else:
                 concentration_data[concentration] = [avg_current]
+        print(f"RAW: {concentration_data}")
 
-        print(concentration_data)
+        if len(concentration_data) < 2:
+            info_text = "Add atleast 2 different concentrations"
+            self.axes2.text(0.5, 0.5, info_text, fontsize=10, horizontalalignment="center", verticalalignment="center", transform=self.axes2.transAxes)
+            return
+        
         # Calculate average of average currents for each concentration
         for concentration, currents_list in concentration_data.items():
-            concentration_data[concentration] = np.mean(currents_list)
+            concentration_data[concentration] = (np.mean(currents_list), np.std(currents_list))
 
         sorted_concentration_data = sorted(concentration_data.items())
-        print(sorted_concentration_data)
-        concentrations, avg_currents = zip(*sorted_concentration_data)
+        concentrations, calculated_currents = zip(*sorted_concentration_data)
+        avg_currents, std_currents = zip(*calculated_currents)
 
-        x_ticks = np.arange(start=min(concentrations), stop=max(concentrations) + 1)
+        print(f"CALCULATED: {sorted_concentration_data}")
+        print(f"AVGS: {avg_currents}")
+        print(f"STDS: {std_currents}")
 
+        # Perform linear regression to get slope, intercept, and R-squared
+        slope, intercept = np.polyfit(concentrations, avg_currents, 1)
+        r_squared = np.corrcoef(concentrations, avg_currents)[0, 1]**2
+        trendline = slope * np.array(concentrations) + intercept
+
+        # Clear existing plot
         self.axes2.clear()
-        self.axes2.plot(concentrations, avg_currents, marker='o', linestyle='--')
+
+        # Display the equation
+        equation_text = f"y = {slope:.4f}x + {intercept:.4f}"
+        r_squared_text = f"R² = {r_squared:.4f}"
+        self.axes2.text(0.2, 0.2, 
+                        f"{equation_text}\n{r_squared_text}", 
+                        fontsize=12, 
+                        bbox=dict(facecolor="orange", alpha=0.3), 
+                        horizontalalignment="center", verticalalignment="center", 
+                        transform=self.axes2.transAxes)
+
+        # Plot the data
+        self.axes2.errorbar(concentrations, avg_currents, yerr=std_currents, marker="o", capsize=3, label="Data")
+        self.axes2.plot(concentrations, trendline, linestyle="--", label="Trendline")
+
+        # Turn grid on and set labels
         self.axes2.grid(True)
         self.axes2.set_ylabel("current(µA)")
         self.axes2.set_xlabel("concentration(mM)")
+
+        # Set tick locations
+        x_ticks = np.arange(start=min(concentrations), stop=max(concentrations) + 1)
         self.axes2.xaxis.set_major_locator(plt.FixedLocator(x_ticks))
         self.axes2.yaxis.set_major_locator(plt.MaxNLocator(10))
 
@@ -347,16 +375,13 @@ class PlotCanvas(FigureCanvas):
             name = data['name']
             self.axes1.plot(times, currents, label=name)
         
-        # Set title and legend and turn on grid
-        #self.axes.set_title('Matplotlib Plot')
+        # Turn on legend and grind and set labels
         self.axes1.legend()
         self.axes1.grid(True)
-
-        # Set labels for axes
         self.axes1.set_ylabel("current(µA)")
         self.axes1.set_xlabel("time(s)")
         
-        # Set number of ticks on the x and y axes
+        # Set tick locations
         self.axes1.xaxis.set_major_locator(plt.MaxNLocator(10))
         self.axes1.yaxis.set_major_locator(plt.MaxNLocator(10))
 
