@@ -14,6 +14,7 @@ import pyperclip
 from io import StringIO
 
 class MyMainWindow(QMainWindow):
+    #current_space_id = 0
     widget_id = 0
     dataset_widgets = {} # {1: (name1, concentration1, notes1), 2: (name2, concentration2, notes2), ...}
     button_add_dataset = None
@@ -27,54 +28,52 @@ class MyMainWindow(QMainWindow):
         layout.addWidget(self.canvas)
         layout.setContentsMargins(2, 2, 2, 2)
 
-        #self.pushButton_add_dataset.clicked.connect(lambda: self.add_dataset_widget())
+        # Menu button signals
         self.actionImport_data_from_CSV.triggered.connect(self.on_import_data_from_csv_clicked)
         self.actionImport_data_from_PSSESSION.triggered.connect(self.on_import_data_from_pssession_clicked)
         self.actionDebug_Info.triggered.connect(self.canvas.toggle_debug_info)
+
+        # Dataspace signals
+        self.pushButton_dataspace_add.clicked.connect(lambda: self.on_dataspace_add_clicked(self.lineEdit_dataspace.text()))
+        self.pushButton_dataspace_remove.clicked.connect(self.on_dataspace_remove_clicked)
+        self.lineEdit_dataspace.editingFinished.connect(self.on_dataspace_editing_finished)
+        self.comboBox_dataspace.activated.connect(self.on_combobox_activated)
 
         # Bidirectional connection for plot seconds slider and lineEdit
         self.horizontalSlider_plot_seconds.valueChanged.connect(lambda value, le=self.lineEdit_plot_seconds: le.setText(str(value)))
         self.lineEdit_plot_seconds.editingFinished.connect(lambda: self.horizontalSlider_plot_seconds.setValue(int(self.lineEdit_plot_seconds.text())))
 
+        # Matplotlib navigation toolbar
         navigation_toolbar = NavigationToolbar(self.canvas, self)
-        #navigation_toolbar.setStyleSheet("QToolBar { border: 0px; }")
         self.verticalLayout_toolbox.addWidget(navigation_toolbar)
-
-        #button_add_dataset.raise_()
-        #hbox = QHBoxLayout()
-        #hbox.addWidget(button_add_dataset)
-        #bottom_layout.raise_()
-        #self.verticalLayout_datasets.addWidget(button_add_dataset)
-        #self.verticalLayout_datasets.setAlignment(Qt.AlignmentFlag.AlignTop)
-        #self.verticalLayout_datasets.setAlignment(hbox, Qt.AlignmentFlag.AlignBottom)
 
         self.add_dataset_widget()
 
     def add_dataset_widget(self, name = None):
-        id = self.widget_id
+        set_id = self.widget_id
         self.widget_id += 1
         
         line_edit_name = QLineEdit(self)
         if name == None:
-            line_edit_name.setText(f"Data {id}")
+            line_edit_name.setText(f"Data {set_id}")
         else: 
             line_edit_name.setText(name)
         line_edit_concentration = CustomQLineEdit(self)
         line_edit_concentration.setText("0")
         line_edit_notes = QLineEdit(self)
 
-        # Update data data on editing finished
-        line_edit_name.textEdited.connect(lambda: self.update_dataset_info(id))
-        line_edit_concentration.textEdited.connect(lambda: self.update_dataset_info(id))
-        line_edit_notes.textEdited.connect(lambda: self.update_dataset_info(id))
+        # Update dataset on text edited
+        line_edit_name.textEdited.connect(lambda: self.update_dataset_info(set_id))
+        line_edit_concentration.textEdited.connect(lambda: self.update_dataset_info(set_id))
+        line_edit_notes.textEdited.connect(lambda: self.update_dataset_info(set_id))
 
         checkbox_toggle_active = QCheckBox(self)
         checkbox_toggle_active.setChecked(True)
-        checkbox_toggle_active.stateChanged.connect(lambda: self.toggle_dataset(id))
+        checkbox_toggle_active.stateChanged.connect(lambda: self.toggle_dataset(set_id))
 
-        # Connect button click to handle_clipboard_data function
+        # Connect "paste data "button to handle_clipboard_data function
         button_paste = QPushButton("Paste Data", self)
-        button_paste.clicked.connect(lambda: self.handle_clipboard_data(id))
+        button_paste.clicked.connect(lambda: self.handle_clipboard_data(set_id))
 
         hbox = QHBoxLayout()
         hbox.addWidget(checkbox_toggle_active)
@@ -87,13 +86,15 @@ class MyMainWindow(QMainWindow):
         self.verticalLayout_datasets.addLayout(hbox)
         self.verticalLayout_datasets.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.verticalLayout_datasets.removeWidget(self.button_add_dataset)
+        # Move "add dataset" button to bottom by removing and readding it
+        if set_id > 0:
+            self.verticalLayout_datasets.removeWidget(self.button_add_dataset)
         self.button_add_dataset = QPushButton("Add Dataset", self)
         self.button_add_dataset.clicked.connect(lambda: self.add_dataset_widget())
         self.verticalLayout_datasets.addWidget(self.button_add_dataset)
 
         # Store references to the widgets for later access
-        self.dataset_widgets[id] = {
+        self.dataset_widgets[set_id] = {
             "checkbox_toggle": checkbox_toggle_active,
             "line_edit_name": line_edit_name,
             "line_edit_concentration": line_edit_concentration,
@@ -101,23 +102,24 @@ class MyMainWindow(QMainWindow):
             "button_paste": button_paste
         }
 
-        return id
+        return set_id
     
     def toggle_dataset(self, id):
         if id not in self.dataset_widgets:
-            print(f"Dataset with ID {id} does not exist.")
+            print(f"toggle_dataset: Dataset with ID {id} does not exist.")
             return
-        
+              
+        # Toggle widgets
         for key, widget in self.dataset_widgets[id].items():
             if key != "checkbox_toggle": # Do not disable the checkbox itself
-                widget.setEnabled(not widget.isEnabled())
+                widget.setEnabled(not widget.isEnabled())     
+        # Toggle dataset
         if widget.isEnabled():
             self.canvas.unhide_dataset(id)
         else:
             self.canvas.hide_dataset(id)
+
         self.setFocus() # Prevent setting focus to next widget
-        print(self.canvas.datasets.keys())
-        print(self.canvas.hidden_datasets.keys())
 
     def concentration_input_is_valid(self, id, input):
         concentration_widget = self.dataset_widgets[id]["line_edit_concentration"]
@@ -150,22 +152,20 @@ class MyMainWindow(QMainWindow):
             QMessageBox.warning(self, "No Data", "Clipboard does not contain any data.")
             return
         
-        try:
-            # Parse clipboard data into a DataFrame
+        # Parse clipboard data into a DataFrame
+        try:    
             data_frame = pd.read_csv(StringIO(clipboard_data), sep='\t')
             times = data_frame['time/s'].tolist()
-            print(times)
             currents = data_frame['current/µA'].tolist()
         except Exception as e: 
-            QMessageBox.warning(self, "Error", "Data is in wrong format.")
-            print(e)
+            QMessageBox.warning(self, "Data in wrong format", f"No \"{e}\" found in clipboard")
             return
         
         name, concentration, notes = self.get_widgets_text(id)
         self.canvas.add_dataset(id, name, times, currents, concentration, notes)
 
     def on_import_data_from_csv_clicked(self):
-        # pick file to import
+        # Pick file to import
         dialog = QFileDialog(self)
         dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         dialog.setNameFilter("CSVs (*.csv)")
@@ -208,10 +208,10 @@ class MyMainWindow(QMainWindow):
             currents = self.find_pssession_datavalues_by_type(json_data, "PalmSens.Data.DataArrayCurrents")
             
             filename = os.path.basename(filepath)
-            name = filename.split(".")[0]
-            id = self.add_dataset_widget(name)
-            name, concentration, notes = self.get_widgets_text(id)
-            self.canvas.add_dataset(id, name, times, currents, concentration, notes)
+            set_name = filename.split(".")[0]
+            set_id = self.add_dataset_widget(set_name)
+            _, concentration, notes = self.get_widgets_text(set_id)
+            self.canvas.add_dataset(set_id, set_name, 0, "DATASPACE 0", times, currents, concentration, notes)
 
     def find_pssession_datavalues_by_type(self, data, target_type):
         datavalues = None
@@ -225,6 +225,20 @@ class MyMainWindow(QMainWindow):
         
         values = [item['v'] for item in datavalues]
         return values
+    
+    def on_dataspace_add_clicked(self, dataspace_name):
+        self.comboBox_dataspace.addItems([dataspace_name])
+
+    def on_dataspace_remove_clicked(self):
+        index = self.comboBox_dataspace.currentIndex()
+        self.comboBox_dataspace.removeItem(index)
+
+    def on_dataspace_editing_finished(self):
+        pass
+
+    def on_combobox_activated(self, index):
+        item_text = self.comboBox_dataspace.itemText(index)
+        QMessageBox.information(None, "Activated", f"Activated: {item_text}")
     
 class CustomQLineEdit(QLineEdit):
     def mousePressEvent(self, event):
@@ -241,8 +255,10 @@ class PlotCanvas(FigureCanvas):
         self.show_debug_info = True
         self.span = None
         self.span_initialized = False
-        self.datasets = {}  # {"0": {"times":[1,2,3], "currents":[1,2,3], "concentration":1, "notes":"foobar"}, "1": ..."}
-        self.hidden_datasets = {}  # {"0": {"times":[1,2,3], "currents":[1,2,3], "concentration":1, "notes":"foobar"}, "1": ..."}
+
+        self.dataspaces = {} # {"0": {"name": "dataspace 0", "datasets: [dataset0, dataset1]"}}
+        self.datasets = {}  # {"0": {"name": "dataset 0", "times":[1,2,3], "currents":[1,2,3], "concentration":1, "notes":"foobar"}, "1": ..."}
+        self.hidden_datasets = {}  # Storage for toggled off datasets
 
     def toggle_debug_info(self):
         self.show_debug_info = not self.show_debug_info
@@ -266,37 +282,55 @@ class PlotCanvas(FigureCanvas):
             grab_range=6,
             snap_values=snaps) # Snap to time values  
 
-    def update_dataset(self, id, name, concentration, notes):
-        if id in self.datasets:
+    def update_dataset(self, set_id, name, concentration, notes):
+        if set_id in self.datasets:
             # Update concentration and notes for the specified dataset
-            self.datasets[id]['name'] = name
-            self.datasets[id]['concentration'] = float(concentration)
-            self.datasets[id]['notes'] = notes
+            self.datasets[set_id]['name'] = name
+            self.datasets[set_id]['concentration'] = float(concentration)
+            self.datasets[set_id]['notes'] = notes
 
             self.draw_plot()
-            print(self.datasets[id]["name"])
+            print(self.datasets[set_id]["name"])
         else:
-            print(f"Dataset with id '{id}' does not exist.")
+            print(f"update_dataset: Dataset with id '{set_id}' does not exist.")
 
-    def add_dataset(self, id, name, times, currents, concentration, notes):
-        if id in self.datasets:
-            print(f"Dataset with id '{id}' already exists. Dataset overwritten")
+    def add_dataset(self, set_id, set_name, space_id, space_name, times, currents, concentration, notes):
+        if set_id in self.datasets:
+            print(f"add_dataset: Dataset with id '{set_id}' already exists. Dataset overwritten")
             
-        self.datasets[id] = {
-            "name": name,
+        self.datasets[set_id] = {
+            "name": set_name,
             'times': times,
             'currents': currents,
             'concentration': float(concentration),
             'notes': notes
         }
+
+        self.add_dataset_to_dataspace(space_id, space_name, self.datasets[set_id])
+
         self.draw_plot()
         if not self.span_initialized: 
             self.initialize_span(times)
+
+    def add_dataset_to_dataspace(self, space_id, space_name, dataset):
+        # Create new dataspace if id doesnt exist
+        if space_id not in self.dataspaces:
+            self.dataspaces[space_id] = {
+                "name": space_name, 
+                "datasets": []
+            }    
+        # Add dataset to dataspace
+        self.dataspaces[space_id]["datasets"].append(dataset)
+
+        #print(f"dataspace ids: {self.dataspaces.keys()}")
+        #print(f"dataset ids: {self.datasets.keys()}")
+
 
     def hide_dataset(self, id):
         if id not in self.datasets:
             print(f"hide_dataset: Dataset with id '{id}' does not exist.")
             return
+        
         self.hidden_datasets[id] = self.datasets.pop(id)
         self.draw_plot()
     
@@ -304,6 +338,7 @@ class PlotCanvas(FigureCanvas):
         if id not in self.hidden_datasets:
             print(f"unhide_dataset: Dataset with id '{id}' does not exist.")
             return
+        
         self.datasets[id] = self.hidden_datasets.pop(id)
         self.draw_plot()
 
@@ -317,6 +352,7 @@ class PlotCanvas(FigureCanvas):
         
     def plot_results(self):
         concentration_data = {}
+
         # Iterate over each dataset
         for label, data in self.datasets.items():
             # Convert lists to numpy arrays
@@ -334,7 +370,7 @@ class PlotCanvas(FigureCanvas):
                 concentration_data[concentration].append(avg_current)
             else:
                 concentration_data[concentration] = [avg_current]
-        print(f"RAW: {concentration_data}")
+        #print(f"RAW: {concentration_data}")
 
         if len(concentration_data) < 2:
             self.axes2.clear()
