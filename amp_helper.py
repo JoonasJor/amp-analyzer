@@ -14,7 +14,8 @@ import pyperclip
 from io import StringIO
 
 class MyMainWindow(QMainWindow):
-    #current_space_id = 0
+    space_id = 0
+    spaces = {} # {0: "space0"}
     widget_id = 0
     dataset_widgets = {} # {1: (name1, concentration1, notes1), 2: (name2, concentration2, notes2), ...}
     button_add_dataset = None
@@ -89,7 +90,7 @@ class MyMainWindow(QMainWindow):
         # Move "add dataset" button to bottom by removing and readding it
         if set_id > 0:
             self.verticalLayout_datasets.removeWidget(self.button_add_dataset)
-        self.button_add_dataset = QPushButton("Add Dataset", self)
+        self.button_add_dataset = QPushButton("Add New", self)
         self.button_add_dataset.clicked.connect(lambda: self.add_dataset_widget())
         self.verticalLayout_datasets.addWidget(self.button_add_dataset)
 
@@ -227,18 +228,28 @@ class MyMainWindow(QMainWindow):
         return values
     
     def on_dataspace_add_clicked(self, dataspace_name):
-        self.comboBox_dataspace.addItems([dataspace_name])
+        id = self.space_id
+        self.space_id += 1
+        self.spaces[id] = dataspace_name
+
+        self.comboBox_dataspace.addItems([dataspace_name]) 
+        self.lineEdit_dataspace.setText("")
 
     def on_dataspace_remove_clicked(self):
         index = self.comboBox_dataspace.currentIndex()
         self.comboBox_dataspace.removeItem(index)
+
+        name = self.comboBox_dataspace.current
+        self.spaces.pop(id)
 
     def on_dataspace_editing_finished(self):
         pass
 
     def on_combobox_activated(self, index):
         item_text = self.comboBox_dataspace.itemText(index)
-        QMessageBox.information(None, "Activated", f"Activated: {item_text}")
+        self.current_space_name = item_text
+        self.spaces[]
+        print(self.current_space_name)
     
 class CustomQLineEdit(QLineEdit):
     def mousePressEvent(self, event):
