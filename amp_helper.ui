@@ -28,8 +28,8 @@
    <widget class="QWidget" name="horizontalLayoutWidget">
     <property name="geometry">
      <rect>
-      <x>29</x>
-      <y>130</y>
+      <x>30</x>
+      <y>150</y>
       <width>391</width>
       <height>41</height>
      </rect>
@@ -171,37 +171,49 @@
      </item>
     </layout>
    </widget>
-   <widget class="QWidget" name="">
+   <widget class="QWidget" name="layoutWidget">
     <property name="geometry">
      <rect>
       <x>30</x>
       <y>20</y>
-      <width>158</width>
-      <height>82</height>
+      <width>241</width>
+      <height>26</height>
      </rect>
     </property>
-    <layout class="QGridLayout" name="gridLayout">
-     <item row="0" column="0">
+    <layout class="QHBoxLayout" name="horizontalLayout_dataspace_buttons">
+     <item>
       <widget class="QPushButton" name="pushButton_dataspace_add">
        <property name="text">
         <string>Add</string>
        </property>
       </widget>
      </item>
-     <item row="0" column="1">
+     <item>
       <widget class="QPushButton" name="pushButton_dataspace_remove">
        <property name="text">
-        <string>Remove</string>
+        <string>Delete</string>
        </property>
       </widget>
      </item>
-     <item row="1" column="0" colspan="2">
-      <widget class="QLineEdit" name="lineEdit_dataspace"/>
-     </item>
-     <item row="2" column="0" colspan="2">
-      <widget class="QComboBox" name="comboBox_dataspace"/>
+     <item>
+      <widget class="QPushButton" name="pushButton_dataspace_rename">
+       <property name="text">
+        <string>Rename</string>
+       </property>
+      </widget>
      </item>
     </layout>
+   </widget>
+   <widget class="QWidget" name="verticalLayoutWidget_3">
+    <property name="geometry">
+     <rect>
+      <x>30</x>
+      <y>60</y>
+      <width>241</width>
+      <height>80</height>
+     </rect>
+    </property>
+    <layout class="QVBoxLayout" name="verticalLayout_dataspaces"/>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">

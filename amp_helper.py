@@ -14,10 +14,10 @@ import pyperclip
 from io import StringIO
 
 class MyMainWindow(QMainWindow):
-    space_id = 0
-    spaces = {} # {0: "space0"}
-    widget_id = 0
-    dataset_widgets = {} # {1: (name1, concentration1, notes1), 2: (name2, concentration2, notes2), ...}
+    space_widget_id = 0
+    space_widgets = {}
+    set_widget_id = 0
+    set_widgets = {}
     button_add_dataset = None
 
     def __init__(self):
@@ -35,10 +35,11 @@ class MyMainWindow(QMainWindow):
         self.actionDebug_Info.triggered.connect(self.canvas.toggle_debug_info)
 
         # Dataspace signals
-        self.pushButton_dataspace_add.clicked.connect(lambda: self.on_dataspace_add_clicked(self.lineEdit_dataspace.text()))
+        self.pushButton_dataspace_add.clicked.connect(lambda: self.add_dataspace_widget())
         self.pushButton_dataspace_remove.clicked.connect(self.on_dataspace_remove_clicked)
-        self.lineEdit_dataspace.editingFinished.connect(self.on_dataspace_editing_finished)
-        self.comboBox_dataspace.activated.connect(self.on_combobox_activated)
+        self.pushButton_dataspace_rename.clicked.connect(self.on_dataspace_rename_clicked)
+        #self.lineEdit_dataspace.editingFinished.connect(self.on_dataspace_editing_finished)
+        #self.comboBox_dataspace.activated.connect(self.on_combobox_activated)
 
         # Bidirectional connection for plot seconds slider and lineEdit
         self.horizontalSlider_plot_seconds.valueChanged.connect(lambda value, le=self.lineEdit_plot_seconds: le.setText(str(value)))
@@ -49,10 +50,68 @@ class MyMainWindow(QMainWindow):
         self.verticalLayout_toolbox.addWidget(navigation_toolbar)
 
         self.add_dataset_widget()
+        self.add_dataspace_widget()
+        self.space_widgets[0]["button_space"].setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
 
+    def add_dataspace_widget(self):
+        space_id = self.space_widget_id
+        self.space_widget_id += 1
+        space_name = f"Set {space_id}"
+
+        checkbox_toggle_space = QCheckBox(self)
+        checkbox_toggle_space.setChecked(True)
+        checkbox_toggle_space.stateChanged.connect(lambda: self.toggle_dataspace())
+
+        button_space = QPushButton(space_name, self)
+        button_space.clicked.connect(lambda: self.on_button_space_clicked(space_id))
+        button_space.setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
+
+        hbox = QHBoxLayout()
+        hbox.addWidget(checkbox_toggle_space)
+        hbox.addWidget(button_space)
+
+        self.verticalLayout_dataspaces.addLayout(hbox)
+        self.verticalLayout_dataspaces.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        # Store references to the widgets for later access
+        self.space_widgets[space_id] = {
+            "name": space_name,  
+            "checkbox_toggle": checkbox_toggle_space,
+            "button_space": button_space
+        }
+
+        return space_id
+
+    def on_button_space_clicked(self, space_id):
+        # Reset stylesheet on all buttons
+        for widget in self.space_widgets.values():
+            widget["button_space"].setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
+
+        # Set stylesheet on clicked button
+        self.space_widgets[space_id]["button_space"].setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
+
+        self.canvas.set_selected_space_id(space_id)
+        
+    def on_dataspace_remove_clicked(self):
+        pass
+
+    def on_dataspace_rename_clicked(self):
+        pass
+
+    def toggle_dataspace(self):
+        checked_space_ids = []
+
+        # Get ids of all checked boxes
+        for space_id, widgets in self.space_widgets.items():
+            checkbox_toggle = widgets["checkbox_toggle"]     
+            if checkbox_toggle.isChecked():
+                checked_space_ids.append(space_id)
+
+        self.canvas.set_active_spaces_ids(checked_space_ids)
+    
     def add_dataset_widget(self, name = None):
-        set_id = self.widget_id
-        self.widget_id += 1
+        set_id = self.set_widget_id
+        self.set_widget_id += 1
         
         line_edit_name = QLineEdit(self)
         if name == None:
@@ -95,7 +154,7 @@ class MyMainWindow(QMainWindow):
         self.verticalLayout_datasets.addWidget(self.button_add_dataset)
 
         # Store references to the widgets for later access
-        self.dataset_widgets[set_id] = {
+        self.set_widgets[set_id] = {
             "checkbox_toggle": checkbox_toggle_active,
             "line_edit_name": line_edit_name,
             "line_edit_concentration": line_edit_concentration,
@@ -106,12 +165,12 @@ class MyMainWindow(QMainWindow):
         return set_id
     
     def toggle_dataset(self, id):
-        if id not in self.dataset_widgets:
+        if id not in self.set_widgets:
             print(f"toggle_dataset: Dataset with ID {id} does not exist.")
             return
               
         # Toggle widgets
-        for key, widget in self.dataset_widgets[id].items():
+        for key, widget in self.set_widgets[id].items():
             if key != "checkbox_toggle": # Do not disable the checkbox itself
                 widget.setEnabled(not widget.isEnabled())     
         # Toggle dataset
@@ -123,7 +182,7 @@ class MyMainWindow(QMainWindow):
         self.setFocus() # Prevent setting focus to next widget
 
     def concentration_input_is_valid(self, id, input):
-        concentration_widget = self.dataset_widgets[id]["line_edit_concentration"]
+        concentration_widget = self.set_widgets[id]["line_edit_concentration"]
         if input.isdigit():
             concentration_widget.setStyleSheet("")
             return True
@@ -138,7 +197,7 @@ class MyMainWindow(QMainWindow):
         #self.setFocus() # Unfocus from widget
 
     def get_widgets_text(self, id):
-        widgets = self.dataset_widgets[id]
+        widgets = self.set_widgets[id]
         name = widgets["line_edit_name"].text()
         concentration = widgets["line_edit_concentration"].text()
         notes = widgets["line_edit_notes"].text()
@@ -163,7 +222,9 @@ class MyMainWindow(QMainWindow):
             return
         
         name, concentration, notes = self.get_widgets_text(id)
-        self.canvas.add_dataset(id, name, times, currents, concentration, notes)
+        self.canvas.add_dataset(id, name, "DATASPACE0", times, currents, concentration, notes)
+
+        print(currents)
 
     def on_import_data_from_csv_clicked(self):
         # Pick file to import
@@ -212,7 +273,7 @@ class MyMainWindow(QMainWindow):
             set_name = filename.split(".")[0]
             set_id = self.add_dataset_widget(set_name)
             _, concentration, notes = self.get_widgets_text(set_id)
-            self.canvas.add_dataset(set_id, set_name, 0, "DATASPACE 0", times, currents, concentration, notes)
+            self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", times, currents, concentration, notes)
 
     def find_pssession_datavalues_by_type(self, data, target_type):
         datavalues = None
@@ -227,49 +288,38 @@ class MyMainWindow(QMainWindow):
         values = [item['v'] for item in datavalues]
         return values
     
-    def on_dataspace_add_clicked(self, dataspace_name):
-        id = self.space_id
-        self.space_id += 1
-        self.spaces[id] = dataspace_name
-
-        self.comboBox_dataspace.addItems([dataspace_name]) 
-        self.lineEdit_dataspace.setText("")
-
-    def on_dataspace_remove_clicked(self):
-        index = self.comboBox_dataspace.currentIndex()
-        self.comboBox_dataspace.removeItem(index)
-
-        name = self.comboBox_dataspace.current
-        self.spaces.pop(id)
-
-    def on_dataspace_editing_finished(self):
-        pass
-
-    def on_combobox_activated(self, index):
-        item_text = self.comboBox_dataspace.itemText(index)
-        self.current_space_name = item_text
-        self.spaces[]
-        print(self.current_space_name)
-    
 class CustomQLineEdit(QLineEdit):
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
         self.selectAll()
 
 class PlotCanvas(FigureCanvas):
+    show_debug_info = True
+    span = None
+    span_initialized = False
+
+    selected_space_id = 0 # Datasets within this space are drawn on the data plot
+    active_spaces_ids = [0] # Results within these spaces are drawn on the results plot
+
+    dataspaces = {} # {0: {"name": "dataspace 0", "datasets: [dataset0, dataset1]"}, 1: ...}
+    #datasets = {}  # {0: {"name": "dataset 0", "times":[1,2,3], "currents":[1,2,3], "concentration":1, "notes":"foobar"}, 1: ..."}
+    hidden_datasets = {}  # Storage for toggled off datasets
+
     def __init__(self, parent=None): 
         self.figure, (self.axes1, self.axes2) = plt.subplots(1, 2)
         self.figure.tight_layout(pad=0.4)
         super().__init__(self.figure)
         self.setParent(parent)
 
-        self.show_debug_info = True
-        self.span = None
-        self.span_initialized = False
+    def set_selected_space_id(self, space_id: int):
+        self.selected_space_id = space_id
+        print(f"selected space: {self.selected_space_id}")
+        self.draw_plot()
 
-        self.dataspaces = {} # {"0": {"name": "dataspace 0", "datasets: [dataset0, dataset1]"}}
-        self.datasets = {}  # {"0": {"name": "dataset 0", "times":[1,2,3], "currents":[1,2,3], "concentration":1, "notes":"foobar"}, "1": ..."}
-        self.hidden_datasets = {}  # Storage for toggled off datasets
+    def set_active_spaces_ids(self, space_ids: list):
+        self.active_spaces_ids = space_ids
+        print(f"active spaces: {self.active_spaces_ids}")
+        self.draw_plot()
 
     def toggle_debug_info(self):
         self.show_debug_info = not self.show_debug_info
@@ -294,22 +344,20 @@ class PlotCanvas(FigureCanvas):
             snap_values=snaps) # Snap to time values  
 
     def update_dataset(self, set_id, name, concentration, notes):
-        if set_id in self.datasets:
+        datasets = self.get_selected_datasets()
+        if set_id in datasets:
             # Update concentration and notes for the specified dataset
-            self.datasets[set_id]['name'] = name
-            self.datasets[set_id]['concentration'] = float(concentration)
-            self.datasets[set_id]['notes'] = notes
+            datasets[set_id]['name'] = name
+            datasets[set_id]['concentration'] = float(concentration)
+            datasets[set_id]['notes'] = notes
 
             self.draw_plot()
-            print(self.datasets[set_id]["name"])
+            print(datasets[set_id]["name"])
         else:
             print(f"update_dataset: Dataset with id '{set_id}' does not exist.")
 
-    def add_dataset(self, set_id, set_name, space_id, space_name, times, currents, concentration, notes):
-        if set_id in self.datasets:
-            print(f"add_dataset: Dataset with id '{set_id}' already exists. Dataset overwritten")
-            
-        self.datasets[set_id] = {
+    def add_dataset(self, set_id, set_name, space_name, times, currents, concentration, notes):         
+        dataset = {
             "name": set_name,
             'times': times,
             'currents': currents,
@@ -317,40 +365,47 @@ class PlotCanvas(FigureCanvas):
             'notes': notes
         }
 
-        self.add_dataset_to_dataspace(space_id, space_name, self.datasets[set_id])
+        # Create new dataspace if id doesnt exist
+        if self.selected_space_id not in self.dataspaces:
+            self.dataspaces[self.selected_space_id] = {
+                "name": space_name, 
+                "datasets": {}
+            } 
 
-        self.draw_plot()
+        datasets = self.get_selected_datasets()
+        if set_id in datasets:
+            print(f"add_dataset: Dataset with id '{set_id}' already exists. Dataset overwritten")
+
+        # Add dataset to dataspace
+        datasets[set_id] = dataset
+
         if not self.span_initialized: 
             self.initialize_span(times)
+        self.draw_plot()
 
-    def add_dataset_to_dataspace(self, space_id, space_name, dataset):
-        # Create new dataspace if id doesnt exist
-        if space_id not in self.dataspaces:
-            self.dataspaces[space_id] = {
-                "name": space_name, 
-                "datasets": []
-            }    
-        # Add dataset to dataspace
-        self.dataspaces[space_id]["datasets"].append(dataset)
+    def get_selected_datasets(self):
+        if self.selected_space_id in self.dataspaces:
+            datasets = self.dataspaces[self.selected_space_id]["datasets"]
+            return datasets
+        else:
+            return None
 
-        #print(f"dataspace ids: {self.dataspaces.keys()}")
-        #print(f"dataset ids: {self.datasets.keys()}")
-
-
-    def hide_dataset(self, id):
-        if id not in self.datasets:
-            print(f"hide_dataset: Dataset with id '{id}' does not exist.")
+    def hide_dataset(self, set_id):
+        datasets = self.get_selected_datasets()   
+        if set_id not in datasets:
+            print(f"hide_dataset: Dataset with id '{set_id}' does not exist.")
             return
         
-        self.hidden_datasets[id] = self.datasets.pop(id)
+        self.hidden_datasets[set_id] = datasets.pop(set_id)
         self.draw_plot()
     
-    def unhide_dataset(self, id):
-        if id not in self.hidden_datasets:
-            print(f"unhide_dataset: Dataset with id '{id}' does not exist.")
+    def unhide_dataset(self, set_id):
+        datasets = self.get_selected_datasets()   
+        if set_id not in self.hidden_datasets:
+            print(f"unhide_dataset: Dataset with id '{set_id}' does not exist.")
             return
         
-        self.datasets[id] = self.hidden_datasets.pop(id)
+        datasets[set_id] = self.hidden_datasets.pop(set_id)
         self.draw_plot()
 
     def initialize_span(self, times):  
@@ -361,11 +416,14 @@ class PlotCanvas(FigureCanvas):
         self.span.extents = (span_left, span_right)
         self.span_initialized = True
         
-    def plot_results(self):
-        concentration_data = {}
-
+    def plot_results(self): 
+        datasets = self.get_selected_datasets()
+        if datasets == None:
+            return
+        
         # Iterate over each dataset
-        for label, data in self.datasets.items():
+        concentration_data = {}
+        for data in datasets.values():
             # Convert lists to numpy arrays
             times = np.array(data["times"])
             currents = np.array(data["currents"])
@@ -437,8 +495,15 @@ class PlotCanvas(FigureCanvas):
         # Clear existing plot
         self.axes1.clear()
 
-        # Plot each dataset
-        for label, data in self.datasets.items():
+        datasets = self.get_selected_datasets()
+        if datasets == None:
+            self.axes1.grid(True)
+            self.draw()
+            print("no datasets")
+            return
+        
+        # Plot each dataset      
+        for data in datasets.values():
             times = data['times']
             currents = data['currents']
             name = data['name']
@@ -454,10 +519,9 @@ class PlotCanvas(FigureCanvas):
         self.axes1.xaxis.set_major_locator(plt.MaxNLocator(10))
         self.axes1.yaxis.set_major_locator(plt.MaxNLocator(10))
 
-    def draw_plot(self):
+    def draw_plot(self):    
         self.plot_data()
-        if len(self.datasets) > 1: 
-            self.plot_results()
+        self.plot_results()
         self.draw()
     
     def draw_debug_box(self, concentrations, avg_currents, std_currents, slope, intercept, trendline):
