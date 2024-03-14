@@ -49,7 +49,13 @@ class MyMainWindow(QMainWindow):
         navigation_toolbar = NavigationToolbar(self.canvas, self)
         self.verticalLayout_toolbox.addWidget(navigation_toolbar)
 
-        self.add_dataset_widget()
+        set_id = self.add_dataset_widget()
+
+        # Initialize one dataset for testing purposes
+        set_name, concentration, notes = self.get_widgets_text(set_id)
+        times = np.arange(0, 100.1, 0.1)
+        currents = np.linspace(-15, -5, len(times))
+        self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", times, currents, concentration, notes)
         self.add_dataspace_widget()
         self.space_widgets[0]["button_space"].setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
 
@@ -255,10 +261,30 @@ class MyMainWindow(QMainWindow):
         dialog = QFileDialog(self)
         dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         dialog.setNameFilter("PSSESSION (*.pssession)")
-        if dialog.exec():
-            filepaths = dialog.selectedFiles()
-            print("Selected file:", filepaths)
-            self.handle_pssession_data(filepaths)
+        if not dialog.exec():
+            # If user closes file picker
+            return
+        
+        filepaths = dialog.selectedFiles()
+        print("Selected file:", filepaths)
+        if len(self.canvas.dataspaces[self.canvas.selected_space_id]["datasets"]) > 0:
+            msgBox = QMessageBox()
+            msgBox.setWindowTitle("Dataset Exists")
+            msgBox.setText("Overwrite existing dataset?")
+            msgBox.setStandardButtons(QMessageBox.StandardButton.Yes | 
+                                      QMessageBox.StandardButton.No | 
+                                      QMessageBox.StandardButton.Cancel)
+            #msgBox.setDefaultButton(QMessageBox.Yes)
+            ret = msgBox.exec()
+
+            if ret == QMessageBox.StandardButton.Cancel:
+                # Cancel action
+                return
+            elif ret == QMessageBox.StandardButton.Yes:
+                # Delete existing dataspace
+                self.canvas.dataspaces.pop(self.canvas.selected_space_id)
+                self.canvas.span_initialized = False
+        self.handle_pssession_data(filepaths)
 
     def handle_pssession_data(self, filepaths):
         for filepath in filepaths:
@@ -266,6 +292,7 @@ class MyMainWindow(QMainWindow):
                 data = f.read()
                 data = data.replace("\ufeff", "")
                 json_data = json.loads(data)
+
             times = self.find_pssession_datavalues_by_type(json_data, "PalmSens.Data.DataArrayTime")
             currents = self.find_pssession_datavalues_by_type(json_data, "PalmSens.Data.DataArrayCurrents")
             
@@ -326,14 +353,16 @@ class PlotCanvas(FigureCanvas):
         self.draw_plot()
         print(f"debug info: {self.show_debug_info}")
 
-    def onselect(self, vmin, vmax):
+    def on_move_span(self, vmin, vmax):
         print("span:", self.span.extents)
-        if len(self.datasets) > 1: self.draw_plot()
+        datasets = self.get_selected_datasets()
+        if len(datasets) > 1: 
+            self.draw_plot()
 
     def create_span_selector(self, snaps):
         self.span = SpanSelector(
             self.axes1, 
-            self.onselect,
+            self.on_move_span,
             'horizontal', 
             useblit=True, # For faster canvas updates
             interactive=True, # Allow resizing by dragging from edges
@@ -537,6 +566,7 @@ class PlotCanvas(FigureCanvas):
                         bbox=dict(facecolor="blue", alpha=0.2), 
                         horizontalalignment="left", verticalalignment="center", 
                         transform=self.axes2.transAxes)
+        
 def main():
     app = QApplication(sys.argv)
     window = MyMainWindow()
