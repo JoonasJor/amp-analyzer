@@ -38,8 +38,6 @@ class MyMainWindow(QMainWindow):
         self.pushButton_dataspace_add.clicked.connect(lambda: self.add_dataspace_widget())
         self.pushButton_dataspace_remove.clicked.connect(self.on_dataspace_remove_clicked)
         self.pushButton_dataspace_rename.clicked.connect(self.on_dataspace_rename_clicked)
-        #self.lineEdit_dataspace.editingFinished.connect(self.on_dataspace_editing_finished)
-        #self.comboBox_dataspace.activated.connect(self.on_combobox_activated)
 
         # Bidirectional connection for plot seconds slider and lineEdit
         self.horizontalSlider_plot_seconds.valueChanged.connect(lambda value, le=self.lineEdit_plot_seconds: le.setText(str(value)))
@@ -49,15 +47,8 @@ class MyMainWindow(QMainWindow):
         navigation_toolbar = NavigationToolbar(self.canvas, self)
         self.verticalLayout_toolbox.addWidget(navigation_toolbar)
 
-        set_id = self.add_dataset_widget()
-
-        # Initialize one dataset for testing purposes
-        set_name, concentration, notes = self.get_widgets_text(set_id)
-        times = np.arange(0, 100.1, 0.1)
-        currents = np.linspace(-15, -5, len(times))
-        self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", times, currents, concentration, notes)
+        # Initialize one dataspace
         self.add_dataspace_widget()
-        self.space_widgets[0]["button_space"].setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
 
     def add_dataspace_widget(self):
         space_id = self.space_widget_id
@@ -69,8 +60,8 @@ class MyMainWindow(QMainWindow):
         checkbox_toggle_space.stateChanged.connect(lambda: self.toggle_dataspace())
 
         button_space = QPushButton(space_name, self)
-        button_space.clicked.connect(lambda: self.on_button_space_clicked(space_id))
-        button_space.setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
+        button_space.clicked.connect(lambda: self.switch_dataspace(space_id))
+        button_space.setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
 
         hbox = QHBoxLayout()
         hbox.addWidget(checkbox_toggle_space)
@@ -86,9 +77,16 @@ class MyMainWindow(QMainWindow):
             "button_space": button_space
         }
 
+        # Initialize every space with one dataset
+        self.switch_dataspace(space_id)
+        set_id = self.add_dataset_widget()
+        set_name, concentration, notes = self.get_widgets_text(set_id)
+        times = np.arange(0, 100.1, 0.1)
+        currents = np.linspace(-15, -5, len(times))
+        self.canvas.add_dataset(set_id, set_name, space_name, times, currents, concentration, notes) 
         return space_id
 
-    def on_button_space_clicked(self, space_id):
+    def switch_dataspace(self, space_id):
         # Reset stylesheet on all buttons
         for widget in self.space_widgets.values():
             widget["button_space"].setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
@@ -96,10 +94,24 @@ class MyMainWindow(QMainWindow):
         # Set stylesheet on clicked button
         self.space_widgets[space_id]["button_space"].setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
 
+        # Update dataspace id in canvas
         self.canvas.set_selected_space_id(space_id)
-        
+
+        # Show dataset widgets that are in current dataspace only
+        for widgets in self.set_widgets.values(): 
+            for key, widget in widgets.items():
+                if key == "dataspace_id": # Dict structure is bad so just check for id ## korjaa myöhemmin
+                    continue
+                if widgets["dataspace_id"] == space_id:     
+                    widget.show()  
+                else:
+                    widget.hide()
+
     def on_dataspace_remove_clicked(self):
-        pass
+        self.space_widgets[self.canvas.selected_space_id]["checkbox_toggle"].deleteLater()
+        self.space_widgets[self.canvas.selected_space_id]["button_space"].deleteLater()
+        self.space_widgets.pop(self.canvas.selected_space_id)
+        self.canvas.delete_selected_dataspace()
 
     def on_dataspace_rename_clicked(self):
         pass
@@ -161,6 +173,7 @@ class MyMainWindow(QMainWindow):
 
         # Store references to the widgets for later access
         self.set_widgets[set_id] = {
+            "dataspace_id": self.canvas.selected_space_id,
             "checkbox_toggle": checkbox_toggle_active,
             "line_edit_name": line_edit_name,
             "line_edit_concentration": line_edit_concentration,
@@ -168,8 +181,13 @@ class MyMainWindow(QMainWindow):
             "button_paste": button_paste
         }
 
+        print(self.set_widgets[set_id])
+
         return set_id
     
+    def delete_dataset(self):
+        pass
+
     def toggle_dataset(self, id):
         if id not in self.set_widgets:
             print(f"toggle_dataset: Dataset with ID {id} does not exist.")
@@ -177,7 +195,7 @@ class MyMainWindow(QMainWindow):
               
         # Toggle widgets
         for key, widget in self.set_widgets[id].items():
-            if key != "checkbox_toggle": # Do not disable the checkbox itself
+            if key != "checkbox_toggle" and key != "dataspace_id": # Do not disable the checkbox itself
                 widget.setEnabled(not widget.isEnabled())     
         # Toggle dataset
         if widget.isEnabled():
@@ -282,8 +300,7 @@ class MyMainWindow(QMainWindow):
                 return
             elif ret == QMessageBox.StandardButton.Yes:
                 # Delete existing dataspace
-                self.canvas.dataspaces.pop(self.canvas.selected_space_id)
-                self.canvas.span_initialized = False
+                self.canvas.delete_selected_dataspace()
         self.handle_pssession_data(filepaths)
 
     def handle_pssession_data(self, filepaths):
@@ -295,9 +312,19 @@ class MyMainWindow(QMainWindow):
 
             times = self.find_pssession_datavalues_by_type(json_data, "PalmSens.Data.DataArrayTime")
             currents = self.find_pssession_datavalues_by_type(json_data, "PalmSens.Data.DataArrayCurrents")
-            
-            filename = os.path.basename(filepath)
-            set_name = filename.split(".")[0]
+
+            # Attempt extracting directory + channel name from file name             
+            try:         
+                dir_name = os.path.basename(os.path.dirname(filepath))
+                filename = os.path.splitext(os.path.basename(filepath))[0]
+                channel = filename.split("-")[0]
+                if len(channel) > 1:
+                    set_name = f"{dir_name} {channel}"
+                else:
+                    set_name = filename
+            except Exception as e:
+                print(e)
+
             set_id = self.add_dataset_widget(set_name)
             _, concentration, notes = self.get_widgets_text(set_id)
             self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", times, currents, concentration, notes)
@@ -418,6 +445,11 @@ class PlotCanvas(FigureCanvas):
             return datasets
         else:
             return None
+    
+    def delete_selected_dataspace(self):
+        self.dataspaces.pop(self.selected_space_id)
+        self.span_initialized = False
+        self.draw_plot()
 
     def hide_dataset(self, set_id):
         datasets = self.get_selected_datasets()   
