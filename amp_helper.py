@@ -15,10 +15,39 @@ from io import StringIO
 
 class MyMainWindow(QMainWindow):
     space_widget_id = 0
-    space_widgets = {}
     set_widget_id = 0
-    set_widgets = {}
     button_add_dataset = None
+    widgets = {}
+    '''
+    widgets structure:
+    {
+        space_id0: { 
+            "dataspace_widgets": {
+                "checkbox_toggle": checkbox_toggle_space,
+                "button_space": button_space
+            },
+            "dataset_widgets": {
+                dataset_id0: {
+                    "checkbox_toggle": checkbox_toggle_active,
+                    "line_edit_name": line_edit_name,
+                    "line_edit_concentration": line_edit_concentration,
+                    "line_edit_notes": line_edit_notes,
+                    "button_paste": button_paste
+                },
+                dataset_id1: {
+                    "checkbox_toggle": checkbox_toggle_active,
+                    "line_edit_name": line_edit_name,
+                    "line_edit_concentration": line_edit_concentration,
+                    "line_edit_notes": line_edit_notes,
+                    "button_paste": button_paste
+                }
+            }
+        },
+        space_id1 {
+            ...
+        }
+    }
+    '''
 
     def __init__(self):
         super().__init__()
@@ -57,7 +86,7 @@ class MyMainWindow(QMainWindow):
 
         checkbox_toggle_space = QCheckBox(self)
         checkbox_toggle_space.setChecked(True)
-        checkbox_toggle_space.stateChanged.connect(lambda: self.toggle_dataspace())
+        checkbox_toggle_space.stateChanged.connect(lambda: self.set_active_dataspaces())
 
         button_space = QPushButton(space_name, self)
         button_space.clicked.connect(lambda: self.switch_dataspace(space_id))
@@ -71,10 +100,12 @@ class MyMainWindow(QMainWindow):
         self.verticalLayout_dataspaces.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Store references to the widgets for later access
-        self.space_widgets[space_id] = {
-            "name": space_name,  
-            "checkbox_toggle": checkbox_toggle_space,
-            "button_space": button_space
+        self.widgets[space_id] = { 
+            "dataspace_widgets": {
+                "checkbox_toggle": checkbox_toggle_space,
+                "button_space": button_space
+            },
+            "dataset_widgets": {}
         }
 
         # Initialize every space with one dataset
@@ -83,46 +114,58 @@ class MyMainWindow(QMainWindow):
         set_name, concentration, notes = self.get_widgets_text(set_id)
         times = np.arange(0, 100.1, 0.1)
         currents = np.linspace(-15, -5, len(times))
+        self.set_active_dataspaces()
         self.canvas.add_dataset(set_id, set_name, space_name, times, currents, concentration, notes) 
         return space_id
 
     def switch_dataspace(self, space_id):
+        # Get all dataspace buttons across all dataspaces
+        dataspace_buttons = [widgets["dataspace_widgets"]["button_space"] for widgets in self.widgets.values()]
         # Reset stylesheet on all buttons
-        for widget in self.space_widgets.values():
-            widget["button_space"].setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
+        for button in dataspace_buttons:
+            button.setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
 
         # Set stylesheet on clicked button
-        self.space_widgets[space_id]["button_space"].setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
+        self.widgets[space_id]["dataspace_widgets"]["button_space"].setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
 
         # Update dataspace id in canvas
         self.canvas.set_selected_space_id(space_id)
 
         # Show dataset widgets that are in current dataspace only
-        for widgets in self.set_widgets.values(): 
-            for key, widget in widgets.items():
-                if key == "dataspace_id": # Dict structure is bad so just check for id ## korjaa myöhemmin
-                    continue
-                if widgets["dataspace_id"] == space_id:     
-                    widget.show()  
-                else:
-                    widget.hide()
+        #dataset_widgets = self.widgets[space_id]["dataset_widgets"]
+        for widgets in self.widgets.values(): 
+            for dataset_widgets in widgets["dataset_widgets"].values():
+                for dataset_widget in dataset_widgets.values():
+                    dataset_widget.hide()  
+        for dataset_widgets in self.widgets[space_id]["dataset_widgets"].values():
+            for dataset_widget in dataset_widgets.values():
+                dataset_widget.show()
 
     def on_dataspace_remove_clicked(self):
-        self.space_widgets[self.canvas.selected_space_id]["checkbox_toggle"].deleteLater()
-        self.space_widgets[self.canvas.selected_space_id]["button_space"].deleteLater()
-        self.space_widgets.pop(self.canvas.selected_space_id)
+        # Delete all widgets within current dataspace
+        space_id = self.canvas.selected_space_id
+        dataspace_widgets = self.widgets[space_id]["dataspace_widgets"]
+        for widget in dataspace_widgets.values():
+            widget.deleteLater()
+        
+        dataset_widgets = self.widgets[space_id]["dataset_widgets"]
+        for dataset_widget in dataset_widgets:
+            for widget in dataset_widget.values():
+                widget.deleteLater()
+
+        # Remove dictionary entry
+        self.widgets.pop(space_id)
+        # Delete all data within current dataspace
         self.canvas.delete_selected_dataspace()
 
     def on_dataspace_rename_clicked(self):
         pass
 
-    def toggle_dataspace(self):
+    def set_active_dataspaces(self):
         checked_space_ids = []
-
         # Get ids of all checked boxes
-        for space_id, widgets in self.space_widgets.items():
-            checkbox_toggle = widgets["checkbox_toggle"]     
-            if checkbox_toggle.isChecked():
+        for space_id, widgets in self.widgets.items():
+            if widgets["dataspace_widgets"]["checkbox_toggle"].isChecked():
                 checked_space_ids.append(space_id)
 
         self.canvas.set_active_spaces_ids(checked_space_ids)
@@ -172,41 +215,48 @@ class MyMainWindow(QMainWindow):
         self.verticalLayout_datasets.addWidget(self.button_add_dataset)
 
         # Store references to the widgets for later access
-        self.set_widgets[set_id] = {
-            "dataspace_id": self.canvas.selected_space_id,
+        dataset_widget = {
             "checkbox_toggle": checkbox_toggle_active,
             "line_edit_name": line_edit_name,
             "line_edit_concentration": line_edit_concentration,
             "line_edit_notes": line_edit_notes,
             "button_paste": button_paste
         }
-
-        print(self.set_widgets[set_id])
+        self.widgets[self.canvas.selected_space_id]["dataset_widgets"][set_id] = dataset_widget
 
         return set_id
     
-    def delete_dataset(self):
-        pass
+    def delete_dataset_widget(self, set_id: int):   
+        for widgets in self.widgets.values():
+            if set_id not in widgets["dataset_widgets"]:
+                continue
+            # Delete widgets
+            for dataset_widget in widgets["dataset_widgets"][set_id].values():
+                dataset_widget.deleteLater()
+            # Remove dictionary entry
+            widgets["dataset_widgets"].pop(set_id)          
 
-    def toggle_dataset(self, id):
-        if id not in self.set_widgets:
-            print(f"toggle_dataset: Dataset with ID {id} does not exist.")
+    def toggle_dataset(self, set_id: int):
+        space_id = self.canvas.selected_space_id
+        if set_id not in self.widgets[space_id]["dataset_widgets"]:
+            print(f"toggle_dataset: Dataset with ID {set_id} does not exist.")
             return
               
         # Toggle widgets
-        for key, widget in self.set_widgets[id].items():
-            if key != "checkbox_toggle" and key != "dataspace_id": # Do not disable the checkbox itself
-                widget.setEnabled(not widget.isEnabled())     
+        for key, widget in self.widgets[space_id]["dataset_widgets"][set_id].items():
+            if key != "checkbox_toggle": # Do not toggle the checkbox itself
+                widget.setEnabled(not widget.isEnabled())
         # Toggle dataset
         if widget.isEnabled():
-            self.canvas.unhide_dataset(id)
+            self.canvas.unhide_dataset(set_id)
         else:
-            self.canvas.hide_dataset(id)
+            self.canvas.hide_dataset(set_id)
 
         self.setFocus() # Prevent setting focus to next widget
 
-    def concentration_input_is_valid(self, id, input):
-        concentration_widget = self.set_widgets[id]["line_edit_concentration"]
+    def concentration_input_is_valid(self, set_id, input):
+        space_id = self.canvas.selected_space_id
+        concentration_widget = self.widgets[space_id]["dataset_widgets"][set_id]["line_edit_concentration"]
         if input.isdigit():
             concentration_widget.setStyleSheet("")
             return True
@@ -220,11 +270,13 @@ class MyMainWindow(QMainWindow):
             self.canvas.update_dataset(id, name, concentration, notes)
         #self.setFocus() # Unfocus from widget
 
-    def get_widgets_text(self, id):
-        widgets = self.set_widgets[id]
-        name = widgets["line_edit_name"].text()
-        concentration = widgets["line_edit_concentration"].text()
-        notes = widgets["line_edit_notes"].text()
+    def get_widgets_text(self, set_id):
+        space_id = self.canvas.selected_space_id
+        dataset_widgets = self.widgets[space_id]["dataset_widgets"][set_id]
+
+        name = dataset_widgets["line_edit_name"].text()
+        concentration = dataset_widgets["line_edit_concentration"].text()
+        notes = dataset_widgets["line_edit_notes"].text()
 
         return name, concentration, notes
 
@@ -284,8 +336,9 @@ class MyMainWindow(QMainWindow):
             return
         
         filepaths = dialog.selectedFiles()
-        print("Selected file:", filepaths)
-        if len(self.canvas.dataspaces[self.canvas.selected_space_id]["datasets"]) > 0:
+        #print("Selected file:", filepaths)
+        space_id = self.canvas.selected_space_id
+        if len(self.canvas.dataspaces[space_id]["datasets"]) > 0:
             msgBox = QMessageBox()
             msgBox.setWindowTitle("Dataset Exists")
             msgBox.setText("Overwrite existing dataset?")
@@ -299,6 +352,11 @@ class MyMainWindow(QMainWindow):
                 # Cancel action
                 return
             elif ret == QMessageBox.StandardButton.Yes:
+                # Delete widgets
+                set_ids = list(self.widgets[space_id]["dataset_widgets"].keys())
+                print(set_ids)
+                for set_id in set_ids:
+                    self.delete_dataset_widget(set_id)
                 # Delete existing dataspace
                 self.canvas.delete_selected_dataspace()
         self.handle_pssession_data(filepaths)
@@ -382,7 +440,7 @@ class PlotCanvas(FigureCanvas):
 
     def on_move_span(self, vmin, vmax):
         print("span:", self.span.extents)
-        datasets = self.get_selected_datasets()
+        datasets = self.get_datasets_in_selected_dataspace()
         if len(datasets) > 1: 
             self.draw_plot()
 
@@ -400,7 +458,7 @@ class PlotCanvas(FigureCanvas):
             snap_values=snaps) # Snap to time values  
 
     def update_dataset(self, set_id, name, concentration, notes):
-        datasets = self.get_selected_datasets()
+        datasets = self.get_datasets_in_selected_dataspace()
         if set_id in datasets:
             # Update concentration and notes for the specified dataset
             datasets[set_id]['name'] = name
@@ -428,7 +486,7 @@ class PlotCanvas(FigureCanvas):
                 "datasets": {}
             } 
 
-        datasets = self.get_selected_datasets()
+        datasets = self.get_datasets_in_selected_dataspace()
         if set_id in datasets:
             print(f"add_dataset: Dataset with id '{set_id}' already exists. Dataset overwritten")
 
@@ -439,12 +497,19 @@ class PlotCanvas(FigureCanvas):
             self.initialize_span(times)
         self.draw_plot()
 
-    def get_selected_datasets(self):
+    def get_datasets_in_selected_dataspace(self):
         if self.selected_space_id in self.dataspaces:
             datasets = self.dataspaces[self.selected_space_id]["datasets"]
             return datasets
         else:
             return None
+    
+    def get_datasets_in_active_dataspaces(self):      
+        active_datasets = [self.dataspaces[active_id]["datasets"] for active_id in self.active_spaces_ids if active_id in self.dataspaces]
+        return active_datasets
+        
+    def delete_dataset(self, dataset_id):
+        pass
     
     def delete_selected_dataspace(self):
         self.dataspaces.pop(self.selected_space_id)
@@ -452,7 +517,7 @@ class PlotCanvas(FigureCanvas):
         self.draw_plot()
 
     def hide_dataset(self, set_id):
-        datasets = self.get_selected_datasets()   
+        datasets = self.get_datasets_in_selected_dataspace()   
         if set_id not in datasets:
             print(f"hide_dataset: Dataset with id '{set_id}' does not exist.")
             return
@@ -461,7 +526,7 @@ class PlotCanvas(FigureCanvas):
         self.draw_plot()
     
     def unhide_dataset(self, set_id):
-        datasets = self.get_selected_datasets()   
+        datasets = self.get_datasets_in_selected_dataspace()   
         if set_id not in self.hidden_datasets:
             print(f"unhide_dataset: Dataset with id '{set_id}' does not exist.")
             return
@@ -478,10 +543,71 @@ class PlotCanvas(FigureCanvas):
         self.span_initialized = True
         
     def plot_results(self): 
-        datasets = self.get_selected_datasets()
-        if datasets == None:
+        active_datasets = self.get_datasets_in_active_dataspaces()
+        #print(active_datasets[0]["name"])
+        #datasets = self.get_datasets_in_selected_dataspace()
+        #if datasets == None:
+            #return
+        if len(active_datasets) == 0:
             return
         
+        results = []
+        for dataset in active_datasets:
+            result = self.calculate_results(dataset)
+            results.append(result)
+
+        self.axes2.clear()
+        default_color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+        for i, result in enumerate(results):
+            if result == None:
+                return
+            
+            if len(result) < 2:
+                self.axes2.clear()
+                info_text = "Add atleast 2 different concentrations"
+                self.axes2.text(0.5, 0.5, info_text, fontsize=10, horizontalalignment="center", verticalalignment="center", transform=self.axes2.transAxes)
+                return
+            
+            # Unpack data
+            concentrations, calculated_currents = zip(*result)
+            avg_currents, std_currents = zip(*calculated_currents)
+
+            # Perform linear regression to get slope, intercept, and R-squared
+            slope, intercept = np.polyfit(concentrations, avg_currents, 1)
+            r_squared = np.corrcoef(concentrations, avg_currents)[0, 1]**2
+            trendline = slope * np.array(concentrations) + intercept
+
+            # Plot the data
+            self.axes2.errorbar(concentrations, avg_currents, yerr=std_currents, marker="o", capsize=3, label="Data", color=default_color_cycle[i])
+            self.axes2.plot(concentrations, trendline, linestyle="--", label="Trendline", color=default_color_cycle[i])
+
+            # Display the equation
+            equation_text = f"y = {slope:.4f}x + {intercept:.4f}"
+            r_squared_text = f"R² = {r_squared:.6f}"
+            self.axes2.text(0.1, i / 10 + 0.1, 
+                            f"{equation_text}\n{r_squared_text}", 
+                            fontsize=12, 
+                            bbox=dict(facecolor=default_color_cycle[i], alpha=0.3), 
+                            horizontalalignment="left", verticalalignment="center", 
+                            transform=self.axes2.transAxes)
+
+        # Turn grid on and set labels
+        self.axes2.grid(True)
+        self.axes2.set_ylabel("current(µA)")
+        self.axes2.set_xlabel("concentration(mM)")
+
+        # Set tick locations
+        x_ticks = np.arange(start=min(concentrations), stop=max(concentrations) + 1)
+        self.axes2.xaxis.set_major_locator(plt.FixedLocator(x_ticks))
+        self.axes2.yaxis.set_major_locator(plt.MaxNLocator(10))
+
+        #if len(results) == 1:
+        if self.show_debug_info and len(results) == 1:
+            self.draw_debug_box(concentrations, avg_currents, std_currents, slope, intercept, trendline)
+            #print(sorted_concentration_data)
+
+    def calculate_results(self, datasets):
         # Iterate over each dataset
         concentration_data = {}
         for data in datasets.values():
@@ -501,66 +627,24 @@ class PlotCanvas(FigureCanvas):
             else:
                 concentration_data[concentration] = [avg_current]
         #print(f"RAW: {concentration_data}")
-
-        if len(concentration_data) < 2:
-            self.axes2.clear()
-            info_text = "Add atleast 2 different concentrations"
-            self.axes2.text(0.5, 0.5, info_text, fontsize=10, horizontalalignment="center", verticalalignment="center", transform=self.axes2.transAxes)
-            return
         
         # Calculate average of average currents for each concentration
         for concentration, currents_list in concentration_data.items():
             concentration_data[concentration] = (np.mean(currents_list), np.std(currents_list))
 
         sorted_concentration_data = sorted(concentration_data.items())
-        concentrations, calculated_currents = zip(*sorted_concentration_data)
-        avg_currents, std_currents = zip(*calculated_currents)
 
-        # Perform linear regression to get slope, intercept, and R-squared
-        slope, intercept = np.polyfit(concentrations, avg_currents, 1)
-        r_squared = np.corrcoef(concentrations, avg_currents)[0, 1]**2
-        trendline = slope * np.array(concentrations) + intercept
-
-        # Clear existing plot
-        self.axes2.clear()
-
-        if self.show_debug_info:
-            self.draw_debug_box(concentrations, avg_currents, std_currents, slope, intercept, trendline)
-            #print(sorted_concentration_data)
-
-        # Display the equation
-        equation_text = f"y = {slope:.4f}x + {intercept:.4f}"
-        r_squared_text = f"R² = {r_squared:.4f}"
-        self.axes2.text(0.1, 0.2, 
-                        f"{equation_text}\n{r_squared_text}", 
-                        fontsize=12, 
-                        bbox=dict(facecolor="orange", alpha=0.3), 
-                        horizontalalignment="left", verticalalignment="center", 
-                        transform=self.axes2.transAxes)
-
-        # Plot the data
-        self.axes2.errorbar(concentrations, avg_currents, yerr=std_currents, marker="o", capsize=3, label="Data")
-        self.axes2.plot(concentrations, trendline, linestyle="--", label="Trendline")
-
-        # Turn grid on and set labels
-        self.axes2.grid(True)
-        self.axes2.set_ylabel("current(µA)")
-        self.axes2.set_xlabel("concentration(mM)")
-
-        # Set tick locations
-        x_ticks = np.arange(start=min(concentrations), stop=max(concentrations) + 1)
-        self.axes2.xaxis.set_major_locator(plt.FixedLocator(x_ticks))
-        self.axes2.yaxis.set_major_locator(plt.MaxNLocator(10))
+        return sorted_concentration_data
 
     def plot_data(self):
         # Clear existing plot
         self.axes1.clear()
 
-        datasets = self.get_selected_datasets()
+        datasets = self.get_datasets_in_selected_dataspace()
         if datasets == None:
             self.axes1.grid(True)
             self.draw()
-            print("no datasets")
+            #print("no datasets")
             return
         
         # Plot each dataset      
@@ -592,7 +676,7 @@ class PlotCanvas(FigureCanvas):
         slope_text = f"SLOPE: {slope}"
         intercept_text = f"INTERCEPT: {intercept}"
         trendline_text = f"TRENDLINE: {np.round(trendline, decimals=5)}"
-        self.axes2.text(0.1, 0.1, 
+        self.axes2.text(0.8, 0.8, 
                         f"{concentrations_text}\n{avgs_text}\n{stds_text}\n{slope_text}\n{intercept_text}\n{trendline_text}", 
                         fontsize=8, 
                         bbox=dict(facecolor="blue", alpha=0.2), 
