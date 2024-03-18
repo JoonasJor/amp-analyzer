@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1825</width>
-    <height>871</height>
+    <height>1004</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -20,7 +20,7 @@
       <x>30</x>
       <y>190</y>
       <width>391</width>
-      <height>471</height>
+      <height>601</height>
      </rect>
     </property>
     <layout class="QVBoxLayout" name="verticalLayout_datasets"/>
@@ -29,9 +29,9 @@
     <property name="geometry">
      <rect>
       <x>30</x>
-      <y>150</y>
+      <y>170</y>
       <width>391</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
     <layout class="QHBoxLayout" name="horizontalLayout_2">
@@ -69,7 +69,7 @@
     <property name="geometry">
      <rect>
       <x>30</x>
-      <y>680</y>
+      <y>810</y>
       <width>391</width>
       <height>121</height>
      </rect>
@@ -81,7 +81,7 @@
       <x>440</x>
       <y>60</y>
       <width>1300</width>
-      <height>740</height>
+      <height>871</height>
      </rect>
     </property>
     <property name="sizePolicy">
@@ -200,6 +200,15 @@
        <property name="text">
         <string>Rename</string>
        </property>
+       <property name="checkable">
+        <bool>false</bool>
+       </property>
+       <property name="default">
+        <bool>false</bool>
+       </property>
+       <property name="flat">
+        <bool>false</bool>
+       </property>
       </widget>
      </item>
     </layout>
@@ -209,8 +218,8 @@
      <rect>
       <x>30</x>
       <y>60</y>
-      <width>241</width>
-      <height>80</height>
+      <width>151</width>
+      <height>101</height>
      </rect>
     </property>
     <layout class="QVBoxLayout" name="verticalLayout_dataspaces"/>
