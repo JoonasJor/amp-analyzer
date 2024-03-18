@@ -142,14 +142,15 @@ class MyMainWindow(QMainWindow):
                 dataset_widget.show()
 
     def on_dataspace_remove_clicked(self):
-        # Delete all widgets within current dataspace
+        # Delete all dataspace widgets within current dataspace
         space_id = self.canvas.selected_space_id
         dataspace_widgets = self.widgets[space_id]["dataspace_widgets"]
         for widget in dataspace_widgets.values():
             widget.deleteLater()
-        
+
+        # Delete all dataset widgets within current dataspace
         dataset_widgets = self.widgets[space_id]["dataset_widgets"]
-        for dataset_widget in dataset_widgets:
+        for dataset_widget in dataset_widgets.values():
             for widget in dataset_widget.values():
                 widget.deleteLater()
 
@@ -257,10 +258,12 @@ class MyMainWindow(QMainWindow):
     def concentration_input_is_valid(self, set_id, input):
         space_id = self.canvas.selected_space_id
         concentration_widget = self.widgets[space_id]["dataset_widgets"][set_id]["line_edit_concentration"]
-        if input.isdigit():
+        # Check if input is numeric
+        try:
+            float(input)
             concentration_widget.setStyleSheet("")
             return True
-        else:
+        except ValueError:
             concentration_widget.setStyleSheet("background-color: rgba(140, 0, 0, 0.3)")
             return False
 
@@ -368,8 +371,8 @@ class MyMainWindow(QMainWindow):
                 data = data.replace("\ufeff", "")
                 json_data = json.loads(data)
 
-            times = self.find_pssession_datavalues_by_type(json_data, "PalmSens.Data.DataArrayTime")
-            currents = self.find_pssession_datavalues_by_type(json_data, "PalmSens.Data.DataArrayCurrents")
+            times = self.extract_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayTime")
+            currents = self.extract_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayCurrents")
 
             # Attempt extracting directory + channel name from file name             
             try:         
@@ -387,17 +390,37 @@ class MyMainWindow(QMainWindow):
             _, concentration, notes = self.get_widgets_text(set_id)
             self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", times, currents, concentration, notes)
 
-    def find_pssession_datavalues_by_type(self, data, target_type):
+    def extract_pssession_data_by_type(self, data, target_type):
+        # The json is capitalized in newer pssession files
+        for key in data.keys():
+            if key == "Measurements":
+                key_measurements = "Measurements"
+                key_dataset = "DataSet"
+                key_values = "Values"
+                key_type = "Type"
+                key_datavalues = "DataValues"
+                key_value = "V"
+                break
+            elif key == "measurements":
+                key_measurements = "measurements"
+                key_dataset = "dataset"
+                key_values = "values"
+                key_type = "type"
+                key_datavalues = "datavalues"
+                key_value = "v"
+                break
+        
+        # Extract data into list
         datavalues = None
-        for measurement in data['measurements']:
-            for value in measurement['dataset']['values']:
-                if value['type'] == target_type:
-                    datavalues = value['datavalues']
+        for measurement in data[key_measurements]:
+            for value in measurement[key_dataset][key_values]:
+                if value[key_type] == target_type:
+                    datavalues = value[key_datavalues]
                     #print(value['datavalues'])       
         if datavalues is None:
             return
         
-        values = [item['v'] for item in datavalues]
+        values = [item[key_value] for item in datavalues]
         return values
     
 class CustomQLineEdit(QLineEdit):
@@ -549,6 +572,7 @@ class PlotCanvas(FigureCanvas):
         #if datasets == None:
             #return
         if len(active_datasets) == 0:
+            self.axes2.clear()
             return
         
         results = []
@@ -676,7 +700,7 @@ class PlotCanvas(FigureCanvas):
         slope_text = f"SLOPE: {slope}"
         intercept_text = f"INTERCEPT: {intercept}"
         trendline_text = f"TRENDLINE: {np.round(trendline, decimals=5)}"
-        self.axes2.text(0.8, 0.8, 
+        self.axes2.text(0.6, 0.9, 
                         f"{concentrations_text}\n{avgs_text}\n{stds_text}\n{slope_text}\n{intercept_text}\n{trendline_text}", 
                         fontsize=8, 
                         bbox=dict(facecolor="blue", alpha=0.2), 
