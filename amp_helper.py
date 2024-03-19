@@ -66,6 +66,8 @@ class MyMainWindow(QMainWindow):
         self.actionImport_data_from_CSV.triggered.connect(self.on_import_data_from_csv_clicked)
         self.actionImport_data_from_PSSESSION.triggered.connect(self.on_import_data_from_pssession_clicked)
         self.actionDebug_Info.triggered.connect(self.canvas.toggle_debug_info)
+        self.actionLegend.triggered.connect(self.canvas.toggle_legend)
+        self.actionEquation.triggered.connect(self.canvas.toggle_equation)
 
         # Dataspace signals
         self.pushButton_dataspace_add.clicked.connect(lambda: self.add_dataspace_widget())
@@ -73,21 +75,24 @@ class MyMainWindow(QMainWindow):
         self.pushButton_dataspace_rename.clicked.connect(self.on_dataspace_rename_clicked)
 
         # Bidirectional connection for plot seconds slider and lineEdit
-        self.horizontalSlider_plot_seconds.valueChanged.connect(lambda value, le=self.lineEdit_plot_seconds: le.setText(str(value)))
-        self.lineEdit_plot_seconds.editingFinished.connect(lambda: self.horizontalSlider_plot_seconds.setValue(int(self.lineEdit_plot_seconds.text())))
+        #self.horizontalSlider_plot_seconds.valueChanged.connect(lambda value, le=self.lineEdit_plot_seconds: le.setText(str(value)))
+        #self.lineEdit_plot_seconds.editingFinished.connect(lambda: self.horizontalSlider_plot_seconds.setValue(int(self.lineEdit_plot_seconds.text())))
 
         # Matplotlib navigation toolbar
         navigation_toolbar = NavigationToolbar(self.canvas, self)
         self.verticalLayout_toolbox.addWidget(navigation_toolbar)
+        #self.verticalLayout_toolbox.setAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.layout_datasets = QVBoxLayout(self.widget_datasets)
         #self.widget_datasets.setStyleSheet("border: 1px solid grey;")  
 
         label_spacer = QLabel(self)
-        label_spacer.setFixedWidth(13)
+        label_spacer.setFixedWidth(40)
         label_name = QLabel(self)
         label_name.setText("Name")
         label_name.setFixedWidth(100)
+        label_spacer2 = QLabel(self)
+        label_spacer2.setFixedWidth(5)
         label_concentration = QLabel(self)
         label_concentration.setText("Concentration")
         label_name.setFixedWidth(50)
@@ -97,6 +102,7 @@ class MyMainWindow(QMainWindow):
         hbox = QHBoxLayout()
         hbox.addWidget(label_spacer)
         hbox.addWidget(label_name)
+        hbox.addWidget(label_spacer2)
         hbox.addWidget(label_concentration)
         hbox.addWidget(label_notes)
 
@@ -150,7 +156,7 @@ class MyMainWindow(QMainWindow):
 
         hbox = QHBoxLayout()
         hbox.addWidget(checkbox_toggle_space)
-        hbox.addWidget(button_space)
+        hbox.addWidget(button_space, stretch=1)
 
         self.verticalLayout_dataspaces.addLayout(hbox)
         self.verticalLayout_dataspaces.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -267,11 +273,11 @@ class MyMainWindow(QMainWindow):
         self.layout_datasets.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Move "add dataset" button to bottom by removing and readding it
-        if set_id > 0:
-            self.layout_datasets.removeWidget(self.button_add_dataset)
-        self.button_add_dataset = QPushButton("Add New", self)
-        self.button_add_dataset.clicked.connect(lambda: self.add_dataset_widget())
-        self.layout_datasets.addWidget(self.button_add_dataset)
+        #if set_id > 0:
+        #    self.layout_datasets.removeWidget(self.button_add_dataset)
+        #self.button_add_dataset = QPushButton("Add New", self)
+        #self.button_add_dataset.clicked.connect(lambda: self.add_dataset_widget())
+        #self.layout_datasets.addWidget(self.button_add_dataset)
 
         # Store references to the widgets for later access
         dataset_widget = {
@@ -446,7 +452,8 @@ class MyMainWindow(QMainWindow):
 
             set_id = self.add_dataset_widget(set_name)
             _, concentration, notes = self.get_widgets_text(set_id)
-            self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", times, currents, concentration, notes)
+            self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", times, currents, concentration, notes, update_plot=False)
+        self.canvas.draw_plot()
 
     def extract_pssession_data_by_type(self, data, target_type):
         # The json is capitalized in newer pssession files
@@ -488,6 +495,9 @@ class CustomQLineEdit(QLineEdit):
 
 class PlotCanvas(FigureCanvas):
     show_debug_info = True
+    show_legend = True
+    show_equation = True
+
     span = None
     span_initialized = False
 
@@ -500,9 +510,9 @@ class PlotCanvas(FigureCanvas):
 
     def __init__(self, parent=None): 
         self.figure, (self.axes1, self.axes2) = plt.subplots(1, 2)
-        self.figure.tight_layout(pad=0.4)
         super().__init__(self.figure)
         self.setParent(parent)
+        #self.draw_plot()
 
     def set_selected_space_id(self, space_id: int):
         self.selected_space_id = space_id
@@ -517,7 +527,17 @@ class PlotCanvas(FigureCanvas):
     def toggle_debug_info(self):
         self.show_debug_info = not self.show_debug_info
         self.draw_plot()
-        print(f"debug info: {self.show_debug_info}")
+        print(f"show debug info: {self.show_debug_info}")
+
+    def toggle_legend(self):
+        self.show_legend = not self.show_legend
+        self.draw_plot()
+        print(f"show legend: {self.show_legend}")
+
+    def toggle_equation(self):
+        self.show_equation = not self.show_equation
+        self.draw_plot()
+        print(f"show equation: {self.show_equation}")
 
     def on_move_span(self, vmin, vmax):
         print("span:", self.span.extents)
@@ -551,7 +571,7 @@ class PlotCanvas(FigureCanvas):
         else:
             print(f"update_dataset: Dataset with id '{set_id}' does not exist.")
 
-    def add_dataset(self, set_id, set_name, space_name, times, currents, concentration, notes):         
+    def add_dataset(self, set_id, set_name, space_name, times, currents, concentration, notes, update_plot = True):         
         dataset = {
             "name": set_name,
             'times': times,
@@ -576,7 +596,8 @@ class PlotCanvas(FigureCanvas):
 
         if not self.span_initialized: 
             self.initialize_span(times)
-        self.draw_plot()
+        if update_plot:
+            self.draw_plot()
 
     def get_datasets_in_selected_dataspace(self):
         if self.selected_space_id in self.dataspaces:
@@ -640,6 +661,7 @@ class PlotCanvas(FigureCanvas):
 
         self.axes2.clear()
         default_color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        dataspace_names = [self.dataspaces[space_id]["name"] for space_id in self.active_spaces_ids if space_id in self.dataspaces] # active_datasets or results doesnt have dataspace names. fix later
 
         for i, result in enumerate(results):
             if result == None:
@@ -647,6 +669,8 @@ class PlotCanvas(FigureCanvas):
             
             if len(result) < 2:
                 self.axes2.clear()
+                self.axes2.set_ylabel("current(µA)")
+                self.axes2.set_xlabel("concentration(mM)")
                 info_text = "Add atleast 2 different concentrations"
                 self.axes2.text(0.5, 0.5, info_text, fontsize=10, horizontalalignment="center", verticalalignment="center", transform=self.axes2.transAxes)
                 return
@@ -661,27 +685,33 @@ class PlotCanvas(FigureCanvas):
             trendline = slope * np.array(concentrations) + intercept
 
             # Plot the data
-            self.axes2.errorbar(concentrations, avg_currents, yerr=std_currents, marker="o", capsize=3, label="Data", color=default_color_cycle[i])
-            self.axes2.plot(concentrations, trendline, linestyle="--", label="Trendline", color=default_color_cycle[i])
+            self.axes2.errorbar(concentrations, avg_currents, yerr=std_currents, marker="o", capsize=3, label=dataspace_names[i], color=default_color_cycle[i])
+            self.axes2.plot(concentrations, trendline, linestyle="--", color=default_color_cycle[i])
 
             # Display the equation
-            equation_text = f"y = {slope:.4f}x + {intercept:.4f}"
-            r_squared_text = f"R² = {r_squared:.6f}"
-            self.axes2.text(0.1, i / 10 + 0.1, 
-                            f"{equation_text}\n{r_squared_text}", 
-                            fontsize=12, 
-                            bbox=dict(facecolor=default_color_cycle[i], alpha=0.3), 
-                            horizontalalignment="left", verticalalignment="center", 
-                            transform=self.axes2.transAxes)
+            if self.show_equation:
+                equation_text = f"y = {slope:.4f}x + {intercept:.4f}"
+                r_squared_text = f"R² = {r_squared:.6f}"
+                self.axes2.text(0.1, i / 10 + 0.1, 
+                                f"{equation_text}\n{r_squared_text}", 
+                                fontsize=12, 
+                                bbox=dict(facecolor=default_color_cycle[i], alpha=0.3), 
+                                horizontalalignment="left", verticalalignment="center", 
+                                transform=self.axes2.transAxes)
 
-        # Turn grid on and set labels
+        # Set legend, grind, set labels
+        if self.show_legend:
+            self.axes2.legend()
         self.axes2.grid(True)
         self.axes2.set_ylabel("current(µA)")
         self.axes2.set_xlabel("concentration(mM)")
-
+        
         # Set tick locations
         x_ticks = np.arange(start=min(concentrations), stop=max(concentrations) + 1)
-        self.axes2.xaxis.set_major_locator(plt.FixedLocator(x_ticks))
+        #print(concentrations)
+        #print(x_ticks)
+        self.axes2.xaxis.set_major_locator(plt.AutoLocator())
+        #self.axes2.xaxis.set_minor_locator(plt.AutoMinorLocator())
         self.axes2.yaxis.set_major_locator(plt.MaxNLocator(10))
 
         #if len(results) == 1:
@@ -736,8 +766,9 @@ class PlotCanvas(FigureCanvas):
             name = data['name']
             self.axes1.plot(times, currents, label=name)
         
-        # Turn on legend and grind and set labels
-        self.axes1.legend()
+        # Set legend, grind, set labels
+        if self.show_legend:
+            self.axes1.legend()
         self.axes1.grid(True)
         self.axes1.set_ylabel("current(µA)")
         self.axes1.set_xlabel("time(s)")
@@ -749,7 +780,9 @@ class PlotCanvas(FigureCanvas):
     def draw_plot(self):    
         self.plot_data()
         self.plot_results()
+        self.figure.tight_layout()
         self.draw()
+        print(f"draw_plot called")     
     
     def draw_debug_box(self, concentrations, avg_currents, std_currents, slope, intercept, trendline):
         concentrations_text = f"CONCENTRATIONS: {concentrations}"
@@ -758,7 +791,7 @@ class PlotCanvas(FigureCanvas):
         slope_text = f"SLOPE: {slope}"
         intercept_text = f"INTERCEPT: {intercept}"
         trendline_text = f"TRENDLINE: {np.round(trendline, decimals=5)}"
-        self.axes2.text(0.6, 0.9, 
+        self.axes2.text(0.1, 0.9, 
                         f"{concentrations_text}\n{avgs_text}\n{stds_text}\n{slope_text}\n{intercept_text}\n{trendline_text}", 
                         fontsize=8, 
                         bbox=dict(facecolor="blue", alpha=0.2), 
