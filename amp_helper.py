@@ -1,9 +1,9 @@
 import json
 import os
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLineEdit, QPushButton, QHBoxLayout, QMessageBox, QFileDialog, QCheckBox
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLineEdit, QPushButton, QHBoxLayout, QMessageBox, QFileDialog, QCheckBox, QLabel, QFrame
 from PyQt6.uic import loadUi
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QFileInfo
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
@@ -17,6 +17,7 @@ class MyMainWindow(QMainWindow):
     space_widget_id = 0
     set_widget_id = 0
     button_add_dataset = None
+    layout_datasets = None
     widgets = {}
     '''
     widgets structure:
@@ -51,7 +52,10 @@ class MyMainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+
         loadUi("amp_helper.ui", self)
+        # Enable dropping onto the main window
+        self.setAcceptDrops(True)
 
         self.canvas = PlotCanvas(self.plotWidget)
         layout = QVBoxLayout(self.plotWidget)
@@ -76,8 +80,60 @@ class MyMainWindow(QMainWindow):
         navigation_toolbar = NavigationToolbar(self.canvas, self)
         self.verticalLayout_toolbox.addWidget(navigation_toolbar)
 
+        self.layout_datasets = QVBoxLayout(self.widget_datasets)
+        #self.widget_datasets.setStyleSheet("border: 1px solid grey;")  
+
+        label_spacer = QLabel(self)
+        label_spacer.setFixedWidth(13)
+        label_name = QLabel(self)
+        label_name.setText("Name")
+        label_name.setFixedWidth(100)
+        label_concentration = QLabel(self)
+        label_concentration.setText("Concentration")
+        label_name.setFixedWidth(50)
+        label_notes = QLabel(self)
+        label_notes.setText("Notes")
+
+        hbox = QHBoxLayout()
+        hbox.addWidget(label_spacer)
+        hbox.addWidget(label_name)
+        hbox.addWidget(label_concentration)
+        hbox.addWidget(label_notes)
+
+        # Add hbox to parent layout
+        self.layout_datasets.addLayout(hbox)
+
         # Initialize one dataspace
         self.add_dataspace_widget()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        mime_data = event.mimeData()
+        if not mime_data.hasUrls():
+            event.ignore()
+            return
+        
+        # Parse folders and individual files from dropped files
+        files = [url.toLocalFile() for url in mime_data.urls()]
+        folders = [file for file in files if QFileInfo(file).isDir()]
+        individual_files = [file for file in files if QFileInfo(file).isFile()]
+
+        # Add individual files and files inside all folders to single list
+        filepaths = []
+        if folders:
+            for folder in folders:
+                for root, _, filenames in os.walk(folder):
+                    filepaths.extend([os.path.join(root, filename) for filename in filenames if filename.endswith('.pssession')])
+        if individual_files:
+            filepaths.extend([file for file in individual_files if file.endswith('.pssession')])
+
+        self.handle_pssession_data(sorted(filepaths))
+            
 
     def add_dataspace_widget(self):
         space_id = self.space_widget_id
@@ -142,14 +198,15 @@ class MyMainWindow(QMainWindow):
                 dataset_widget.show()
 
     def on_dataspace_remove_clicked(self):
-        # Delete all widgets within current dataspace
+        # Delete all dataspace widgets within current dataspace
         space_id = self.canvas.selected_space_id
         dataspace_widgets = self.widgets[space_id]["dataspace_widgets"]
         for widget in dataspace_widgets.values():
             widget.deleteLater()
-        
+
+        # Delete all dataset widgets within current dataspace
         dataset_widgets = self.widgets[space_id]["dataset_widgets"]
-        for dataset_widget in dataset_widgets:
+        for dataset_widget in dataset_widgets.values():
             for widget in dataset_widget.values():
                 widget.deleteLater()
 
@@ -179,8 +236,10 @@ class MyMainWindow(QMainWindow):
             line_edit_name.setText(f"Data {set_id}")
         else: 
             line_edit_name.setText(name)
+        line_edit_name.setFixedWidth(100)
         line_edit_concentration = CustomQLineEdit(self)
         line_edit_concentration.setText("0")
+        line_edit_concentration.setFixedWidth(50)
         line_edit_notes = QLineEdit(self)
 
         # Update dataset on text edited
@@ -193,34 +252,34 @@ class MyMainWindow(QMainWindow):
         checkbox_toggle_active.stateChanged.connect(lambda: self.toggle_dataset(set_id))
 
         # Connect "paste data "button to handle_clipboard_data function
-        button_paste = QPushButton("Paste Data", self)
-        button_paste.clicked.connect(lambda: self.handle_clipboard_data(set_id))
+        #button_paste = QPushButton("Paste Data", self)
+        #button_paste.clicked.connect(lambda: self.handle_clipboard_data(set_id))
 
         hbox = QHBoxLayout()
         hbox.addWidget(checkbox_toggle_active)
         hbox.addWidget(line_edit_name)
         hbox.addWidget(line_edit_concentration)
         hbox.addWidget(line_edit_notes)
-        hbox.addWidget(button_paste)
+        #hbox.addWidget(button_paste)
 
         # Add hbox to parent layout
-        self.verticalLayout_datasets.addLayout(hbox)
-        self.verticalLayout_datasets.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.layout_datasets.addLayout(hbox)
+        self.layout_datasets.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Move "add dataset" button to bottom by removing and readding it
         if set_id > 0:
-            self.verticalLayout_datasets.removeWidget(self.button_add_dataset)
+            self.layout_datasets.removeWidget(self.button_add_dataset)
         self.button_add_dataset = QPushButton("Add New", self)
         self.button_add_dataset.clicked.connect(lambda: self.add_dataset_widget())
-        self.verticalLayout_datasets.addWidget(self.button_add_dataset)
+        self.layout_datasets.addWidget(self.button_add_dataset)
 
         # Store references to the widgets for later access
         dataset_widget = {
             "checkbox_toggle": checkbox_toggle_active,
             "line_edit_name": line_edit_name,
             "line_edit_concentration": line_edit_concentration,
-            "line_edit_notes": line_edit_notes,
-            "button_paste": button_paste
+            "line_edit_notes": line_edit_notes#,
+            #"button_paste": button_paste
         }
         self.widgets[self.canvas.selected_space_id]["dataset_widgets"][set_id] = dataset_widget
 
@@ -257,10 +316,12 @@ class MyMainWindow(QMainWindow):
     def concentration_input_is_valid(self, set_id, input):
         space_id = self.canvas.selected_space_id
         concentration_widget = self.widgets[space_id]["dataset_widgets"][set_id]["line_edit_concentration"]
-        if input.isdigit():
+        # Check if input is numeric
+        try:
+            float(input)
             concentration_widget.setStyleSheet("")
             return True
-        else:
+        except ValueError:
             concentration_widget.setStyleSheet("background-color: rgba(140, 0, 0, 0.3)")
             return False
 
@@ -368,8 +429,8 @@ class MyMainWindow(QMainWindow):
                 data = data.replace("\ufeff", "")
                 json_data = json.loads(data)
 
-            times = self.find_pssession_datavalues_by_type(json_data, "PalmSens.Data.DataArrayTime")
-            currents = self.find_pssession_datavalues_by_type(json_data, "PalmSens.Data.DataArrayCurrents")
+            times = self.extract_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayTime")
+            currents = self.extract_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayCurrents")
 
             # Attempt extracting directory + channel name from file name             
             try:         
@@ -387,17 +448,37 @@ class MyMainWindow(QMainWindow):
             _, concentration, notes = self.get_widgets_text(set_id)
             self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", times, currents, concentration, notes)
 
-    def find_pssession_datavalues_by_type(self, data, target_type):
+    def extract_pssession_data_by_type(self, data, target_type):
+        # The json is capitalized in newer pssession files
+        for key in data.keys():
+            if key == "Measurements":
+                key_measurements = "Measurements"
+                key_dataset = "DataSet"
+                key_values = "Values"
+                key_type = "Type"
+                key_datavalues = "DataValues"
+                key_value = "V"
+                break
+            elif key == "measurements":
+                key_measurements = "measurements"
+                key_dataset = "dataset"
+                key_values = "values"
+                key_type = "type"
+                key_datavalues = "datavalues"
+                key_value = "v"
+                break
+        
+        # Extract data into list
         datavalues = None
-        for measurement in data['measurements']:
-            for value in measurement['dataset']['values']:
-                if value['type'] == target_type:
-                    datavalues = value['datavalues']
+        for measurement in data[key_measurements]:
+            for value in measurement[key_dataset][key_values]:
+                if value[key_type] == target_type:
+                    datavalues = value[key_datavalues]
                     #print(value['datavalues'])       
         if datavalues is None:
             return
         
-        values = [item['v'] for item in datavalues]
+        values = [item[key_value] for item in datavalues]
         return values
     
 class CustomQLineEdit(QLineEdit):
@@ -549,6 +630,7 @@ class PlotCanvas(FigureCanvas):
         #if datasets == None:
             #return
         if len(active_datasets) == 0:
+            self.axes2.clear()
             return
         
         results = []
@@ -676,7 +758,7 @@ class PlotCanvas(FigureCanvas):
         slope_text = f"SLOPE: {slope}"
         intercept_text = f"INTERCEPT: {intercept}"
         trendline_text = f"TRENDLINE: {np.round(trendline, decimals=5)}"
-        self.axes2.text(0.8, 0.8, 
+        self.axes2.text(0.6, 0.9, 
                         f"{concentrations_text}\n{avgs_text}\n{stds_text}\n{slope_text}\n{intercept_text}\n{trendline_text}", 
                         fontsize=8, 
                         bbox=dict(facecolor="blue", alpha=0.2), 
