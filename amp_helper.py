@@ -76,13 +76,16 @@ class MyMainWindow(QMainWindow):
         self.actionSave_as.triggered.connect(lambda: self.on_save_clicked(ask_for_save_location=True))
         self.actionLoad.triggered.connect(lambda: self.on_load_clicked())
 
-        # Dataspace signals
+        # Dataspace button signals
         self.pushButton_dataspace_add.clicked.connect(lambda: self.add_dataspace_widget())
         self.pushButton_dataspace_remove.clicked.connect(lambda:self.on_dataspace_remove_clicked())
         self.pushButton_dataspace_rename.clicked.connect(lambda:self.on_dataspace_rename_clicked())
 
         # Current to concentration signal
         self.lineEdit_convert_current.textChanged.connect(lambda: self.find_concentration_from_current(self.lineEdit_convert_current.text()))
+
+        # Dataspace notes signal
+        self.plainTextEdit_space_notes.textChanged.connect(lambda: self.update_dataspace_notes(self.plainTextEdit_space_notes.toPlainText()))
 
 
         # Bidirectional connection for plot seconds slider and lineEdit
@@ -172,21 +175,13 @@ class MyMainWindow(QMainWindow):
         if not file_name:
             return
         
-        # Unhide all datasets for easier gui reconstruction later
-        #hidden_datasets_ids = {}
-
-        #hidden_space_ids = list(self.canvas.hidden_datasets.keys())
-        #for space_id in hidden_space_ids:
-        #    hidden_dataset_ids = list(self.canvas.hidden_datasets[space_id].keys())
-        #    hidden_datasets_ids[space_id] = hidden_dataset_ids
-        #    for set_id in hidden_dataset_ids:
-        #        self.canvas.unhide_dataset(set_id, space_id)
-        
         # Add all pickleable objects to a dict
         data = {
             "window": {
                 "space_widget_id": self.space_widget_id,
-                "set_widget_id": self.set_widget_id#,
+                "set_widget_id": self.set_widget_id,
+                "current_convert_value": self.lineEdit_convert_current.text()
+                #"active_spaces_ids": self.canvas.active_spaces_ids
                 #"layout_datasets": self.layout_datasets,
                 #"widgets": self.widgets
             },
@@ -232,21 +227,34 @@ class MyMainWindow(QMainWindow):
 
             space_widget_id = data["window"]["space_widget_id"]
             set_widget_id = data["window"]["set_widget_id"]
+            #toggled_on_space_ids = data["window"]["toggled_on_space_ids"]
 
             self.canvas.show_debug_info = data["plot"]["show_debug_info"]
             self.canvas.show_legend = data["plot"]["show_legend"]
             self.canvas.show_equation = data["plot"]["show_equation"]
             #self.canvas.span_initialized = data["plot"]["span_initialized"]
             selected_space_id = data["plot"]["selected_space_id"]
-            #self.canvas.active_spaces_ids = data["plot"]["active_spaces_ids"]
+            active_spaces_ids = data["plot"]["active_spaces_ids"]
             dataspaces = data["plot"]["dataspaces"]
             #self.canvas.hidden_datasets = data["plot"]["hidden_datasets"]
-            self.canvas.color_index = data["plot"]["color_index"]
+            self.canvas.color_index = data["plot"]["color_index"]     
 
             # Reconstruct data and gui
             for space_id, dataspace in dataspaces.items():
                 space_name = dataspace["name"]
-                self.add_dataspace_widget(space_id, space_name, initialize_dataset=False)
+                space_notes = dataspace["notes"]
+                if space_id in active_spaces_ids:
+                    space_toggled_on = True
+                else:
+                    space_toggled_on = False
+
+                self.add_dataspace_widget(
+                    space_id=space_id, 
+                    space_name=space_name, 
+                    space_notes=space_notes, 
+                    initialize_dataset=False, 
+                    space_toggled_on=space_toggled_on
+                )
                 self.canvas.set_selected_space_id(space_id, update_plot=False)
 
                 for set_id, dataset in dataspace["datasets"].items(): ######
@@ -258,12 +266,34 @@ class MyMainWindow(QMainWindow):
                     hidden = dataset["hidden"]
                     color = dataset["line_color"]
 
-                    _ = self.add_dataset_widget(set_name, concentration, set_id, space_id, dataset_hidden=hidden)
-                    self.canvas.add_dataset(set_id, set_name, space_name, times, currents, concentration, notes, update_plot=False, space_id=space_id, hidden=hidden, color=color)
+                    _ = self.add_dataset_widget(
+                        name=set_name, 
+                        concentration=concentration, 
+                        notes=notes, 
+                        set_id=set_id, 
+                        space_id=space_id, 
+                        dataset_hidden=hidden
+                    )
+                    self.canvas.add_dataset(
+                        set_id=set_id, 
+                        set_name=set_name, 
+                        space_name=space_name,
+                        space_notes=space_notes,
+                        times=times, 
+                        currents=currents, 
+                        concentration=concentration, 
+                        notes=notes, update_plot=False, 
+                        space_id=space_id, 
+                        hidden=hidden, 
+                        color=color
+                    )
 
             self.space_widget_id = space_widget_id
             self.set_widget_id = set_widget_id
             self.canvas.span_initialized = False
+
+            self.lineEdit_convert_current.setText(data["window"]["current_convert_value"])
+
             self.switch_dataspace(selected_space_id)
             self.set_active_dataspaces()
 
@@ -283,6 +313,10 @@ class MyMainWindow(QMainWindow):
             return
         
         datasets = self.canvas.get_datasets()
+        if datasets == None:
+            self.lineEdit_convert_concentration.setText("Out Of Range")
+            return
+        
         result = self.canvas.calculate_results(datasets)
         concentrations, calculated_currents = zip(*result)
         avg_currents, std_currents = zip(*calculated_currents)
@@ -307,7 +341,7 @@ class MyMainWindow(QMainWindow):
         self.lineEdit_convert_concentration.setText(concentration_text)
 
 
-    def add_dataspace_widget(self, space_id = None, space_name = None, initialize_dataset = True):
+    def add_dataspace_widget(self, space_id = None, space_name = None, space_notes = "", initialize_dataset = True, space_toggled_on = True):
         if space_id == None:
             space_id = self.space_widget_id
             self.space_widget_id += 1
@@ -315,7 +349,7 @@ class MyMainWindow(QMainWindow):
             space_name = f"Set {space_id}"
 
         checkbox_toggle_space = QCheckBox(self)
-        checkbox_toggle_space.setChecked(True)
+        checkbox_toggle_space.setChecked(space_toggled_on)
         checkbox_toggle_space.stateChanged.connect(lambda: self.set_active_dataspaces())
 
         button_space = QPushButton(space_name, self)
@@ -339,14 +373,15 @@ class MyMainWindow(QMainWindow):
         }
 
         # Initialize every space with one dataset
-        if initialize_dataset:
+        if initialize_dataset:   
             self.switch_dataspace(space_id)
             set_id = self.add_dataset_widget()
             set_name, concentration, notes = self.get_widgets_text(set_id)
             times = np.arange(0, 100.1, 0.1)
             currents = np.linspace(-15, -5, len(times))
             self.set_active_dataspaces()
-            self.canvas.add_dataset(set_id, set_name, space_name, times, currents, concentration, notes) 
+            self.canvas.add_dataset(set_id, set_name, space_name, space_notes, times, currents, concentration, notes, space_id=space_id)
+            self.plainTextEdit_space_notes.setPlainText(space_notes)
 
         return space_id
 
@@ -364,6 +399,9 @@ class MyMainWindow(QMainWindow):
         # Update dataspace id in canvas
         self.canvas.set_selected_space_id(space_id)
 
+        # Update current to concentration widgets
+        self.find_concentration_from_current(self.lineEdit_convert_current.text())
+
         # Show dataset widgets that are in current dataspace only
         #dataset_widgets = self.widgets[space_id]["dataset_widgets"]
         for widgets in self.widgets.values(): 
@@ -373,6 +411,11 @@ class MyMainWindow(QMainWindow):
         for dataset_widgets in self.widgets[space_id]["dataset_widgets"].values():
             for dataset_widget in dataset_widgets.values():
                 dataset_widget.show()
+        
+        # Update notes text box
+        if space_id in self.canvas.dataspaces:
+            text = self.canvas.dataspaces[space_id]["notes"]
+            self.plainTextEdit_space_notes.setPlainText(text)
 
 
     def on_dataspace_remove_clicked(self, space_id = None):
@@ -396,7 +439,7 @@ class MyMainWindow(QMainWindow):
         self.widgets.pop(space_id)
         # Delete all data within current dataspace
         self.canvas.delete_dataspace(space_id)
-        # Update selected dataspace
+        # Switch to first dataspace in the dict
         if len(self.widgets) > 0:
             first_id = list(self.widgets.keys())[0]
             self.switch_dataspace(first_id)
@@ -414,9 +457,14 @@ class MyMainWindow(QMainWindow):
                 checked_space_ids.append(space_id)
 
         self.canvas.set_active_spaces_ids(checked_space_ids)
+
+
+    def update_dataspace_notes(self, text):
+        space_id = self.canvas.selected_space_id
+        self.canvas.dataspaces[space_id]["notes"] = text
     
 
-    def add_dataset_widget(self, name = None, concentration = 0, set_id = None, space_id = None, dataset_hidden = False):
+    def add_dataset_widget(self, name = None, concentration = 0, notes = "", set_id = None, space_id = None, dataset_hidden = False):
         if set_id == None:
             set_id = self.set_widget_id
             self.set_widget_id += 1
@@ -429,10 +477,9 @@ class MyMainWindow(QMainWindow):
         else: 
             line_edit_name.setText(name)
         line_edit_name.setFixedWidth(100)
-        line_edit_concentration = CustomQLineEdit(self)
-        line_edit_concentration.setText(str(concentration))
+        line_edit_concentration = CustomQLineEdit(str(concentration), self)
         line_edit_concentration.setFixedWidth(50)
-        line_edit_notes = QLineEdit(self)
+        line_edit_notes = QLineEdit(notes, self)
 
         if dataset_hidden:
             line_edit_name.setEnabled(False)
@@ -440,9 +487,9 @@ class MyMainWindow(QMainWindow):
             line_edit_notes.setEnabled(False)
 
         # Update dataset on text edited
-        line_edit_name.textEdited.connect(lambda: self.update_dataset_info(set_id))
+        line_edit_name.editingFinished.connect(lambda: self.update_dataset_info(set_id))
         line_edit_concentration.textEdited.connect(lambda: self.update_dataset_info(set_id))
-        line_edit_notes.textEdited.connect(lambda: self.update_dataset_info(set_id))
+        line_edit_notes.editingFinished.connect(lambda: self.update_dataset_info(set_id, False))
       
         checkbox_toggle_active = QCheckBox(self)
         if dataset_hidden:
@@ -534,10 +581,10 @@ class MyMainWindow(QMainWindow):
             return False
 
 
-    def update_dataset_info(self, id):
+    def update_dataset_info(self, id, update_plot = True):
         name, concentration, notes = self.get_widgets_text(id)
         if self.concentration_input_is_valid(id, concentration):
-            self.canvas.update_dataset(id, name, concentration, notes)
+            self.canvas.update_dataset(id, name, concentration, notes, update_plot)
         #self.setFocus() # Unfocus from widget
 
 
@@ -661,7 +708,7 @@ class MyMainWindow(QMainWindow):
 
             set_id = self.add_dataset_widget(set_name)
             _, concentration, notes = self.get_widgets_text(set_id)
-            self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", times, currents, concentration, notes, update_plot=False)
+            self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", "", times, currents, concentration, notes, update_plot=False)
         self.canvas.draw_plot()
 
 
@@ -789,7 +836,7 @@ class PlotCanvas(FigureCanvas):
             snap_values=snaps) # Snap to time values  
 
 
-    def update_dataset(self, set_id, name, concentration, notes):
+    def update_dataset(self, set_id, name, concentration, notes, update_plot = True):
         datasets = self.get_datasets()
         if set_id in datasets:
             # Update concentration and notes for the specified dataset
@@ -797,15 +844,17 @@ class PlotCanvas(FigureCanvas):
             datasets[set_id]['concentration'] = float(concentration)
             datasets[set_id]['notes'] = notes
 
-            self.draw_plot()
+            if update_plot:
+                self.draw_plot()
             print(datasets[set_id]["name"])
         else:
             print(f"update_dataset: Dataset with id '{set_id}' does not exist.")
 
 
-    def add_dataset(self, set_id, set_name, space_name, times, currents, concentration, notes, update_plot = True, space_id = None, hidden = False, color = None):
+    def add_dataset(self, set_id, set_name, space_name, space_notes, times, currents, concentration, notes, update_plot = True, space_id = None, hidden = False, color = None):
         if color == None:
             color = self.colors[self.color_index]
+        self.color_index += 1
 
         dataset = {
             "name": set_name,
@@ -817,14 +866,13 @@ class PlotCanvas(FigureCanvas):
             "line_color": color
         }
 
-        self.color_index += 1
-
         if space_id == None:
             space_id = self.selected_space_id
         # Create new dataspace if id doesnt exist
         if space_id not in self.dataspaces:
             self.dataspaces[space_id] = {
                 "name": space_name, 
+                "notes": space_notes,
                 "datasets": {}
             } 
 
@@ -935,8 +983,8 @@ class PlotCanvas(FigureCanvas):
             results.append(result)
 
         self.axes2.clear()
-        tableau_colors = mcolors.TABLEAU_COLORS
-        dataspace_names = [self.dataspaces[space_id]["name"] for space_id in self.active_spaces_ids if space_id in self.dataspaces] # active_datasets or results dont have dataspace names. fix later
+        tableau_colors = list(mcolors.TABLEAU_COLORS)
+        labels = [self.dataspaces[space_id]["name"] for space_id in self.active_spaces_ids if space_id in self.dataspaces] # active_datasets or results dont have dataspace names. fix later
 
         for i, result in enumerate(results):
             if result == None:
@@ -960,7 +1008,7 @@ class PlotCanvas(FigureCanvas):
             trendline = slope * np.array(concentrations) + intercept
 
             # Plot the data
-            self.axes2.errorbar(concentrations, avg_currents, yerr=std_currents, marker="o", capsize=3, label=dataspace_names[i], color=tableau_colors[i])
+            self.axes2.errorbar(concentrations, avg_currents, yerr=std_currents, marker="o", capsize=3, label=labels[i], color=tableau_colors[i])
             self.axes2.plot(concentrations, trendline, linestyle="--", color=tableau_colors[i])
 
             # Display the equation
