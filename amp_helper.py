@@ -4,11 +4,12 @@ import sys
 import traceback
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLineEdit, QPushButton, QHBoxLayout, QMessageBox, QFileDialog, QCheckBox, QLabel, QFrame
 from PyQt6.uic import loadUi
-from PyQt6.QtCore import Qt, QFileInfo, QFile
+from PyQt6.QtCore import Qt, QFileInfo, pyqtSignal
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector, SpanSelector
+from matplotlib.axes import Axes
 import numpy as np
 import pandas as pd
 import pyperclip
@@ -87,10 +88,17 @@ class MyMainWindow(QMainWindow):
         # Dataspace notes signal
         self.plainTextEdit_space_notes.textChanged.connect(lambda: self.update_dataspace_notes(self.plainTextEdit_space_notes.toPlainText()))
 
+        # Unit button signals
+        self.pushButton_milliA.clicked.connect(lambda: self.set_current_unit("mA"))
+        self.pushButton_microA.clicked.connect(lambda: self.set_current_unit("µA"))
+        self.pushButton_nanoA.clicked.connect(lambda: self.set_current_unit("nA"))
+        self.pushButton_millimol.clicked.connect(lambda: self.set_concentration_unit("mmol"))
+        self.pushButton_micromol.clicked.connect(lambda: self.set_concentration_unit("µmol"))
+        self.pushButton_nanomol.clicked.connect(lambda: self.set_concentration_unit("nmol"))
 
-        # Bidirectional connection for plot seconds slider and lineEdit
-        #self.horizontalSlider_plot_seconds.valueChanged.connect(lambda value, le=self.lineEdit_plot_seconds: le.setText(str(value)))
-        #self.lineEdit_plot_seconds.editingFinished.connect(lambda: self.horizontalSlider_plot_seconds.setValue(int(self.lineEdit_plot_seconds.text())))
+        # Initialize unit buttons
+        self.set_current_unit("mA")
+        self.set_concentration_unit("mmol")
 
         # Matplotlib navigation toolbar
         navigation_toolbar = NavigationToolbar(self.canvas, self)
@@ -168,6 +176,42 @@ class MyMainWindow(QMainWindow):
             event.ignore()  # Ignore the close event
 
 
+    def set_concentration_unit(self, unit: str):
+        # Reset stylesheet on all buttons
+        self.pushButton_millimol.setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
+        self.pushButton_micromol.setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
+        self.pushButton_nanomol.setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
+
+        # Set stylesheet on clicked button
+        if unit == "mmol":
+            self.pushButton_millimol.setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
+        elif unit == "µmol":
+            self.pushButton_micromol.setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
+        elif unit == "nmol":
+            self.pushButton_nanomol.setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
+        
+        self.canvas.unit_concentration = unit
+        self.canvas.update_plot_units()
+
+
+    def set_current_unit(self, unit: str):
+        # Reset stylesheet on all buttons
+        self.pushButton_milliA.setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
+        self.pushButton_microA.setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
+        self.pushButton_nanoA.setStyleSheet("background-color: rgba(128, 128, 128, 0.3)")
+
+        # Set stylesheet on clicked button
+        if unit == "mA":
+            self.pushButton_milliA.setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
+        elif unit == "µA":
+            self.pushButton_microA.setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
+        elif unit == "nA":
+            self.pushButton_nanoA.setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
+        
+        self.canvas.unit_current = unit
+        self.canvas.update_plot_units()
+
+
     def on_save_clicked(self, ask_for_save_location: bool):
         default_name = "data.pickle"
         file_name, _ = QFileDialog.getSaveFileName(self, "Save File", default_name, "Pickle Files (*.pickle)")
@@ -194,10 +238,10 @@ class MyMainWindow(QMainWindow):
                 "selected_space_id": self.canvas.selected_space_id,
                 "active_spaces_ids": self.canvas.active_spaces_ids,
                 "dataspaces": self.canvas.dataspaces,
-                "color_index": self.canvas.color_index
-                #"hidden_datasets": self.canvas.hidden_datasets
-            }#,
-            #"hidden_datasets_ids": hidden_datasets_ids
+                "color_index": self.canvas.color_index,
+                "unit_current": self.canvas.unit_current,
+                "unit_concentration": self.canvas.unit_concentration
+            }
         }
 
         # Use pickle to write the dict into a file
@@ -236,8 +280,9 @@ class MyMainWindow(QMainWindow):
             selected_space_id = data["plot"]["selected_space_id"]
             active_spaces_ids = data["plot"]["active_spaces_ids"]
             dataspaces = data["plot"]["dataspaces"]
-            #self.canvas.hidden_datasets = data["plot"]["hidden_datasets"]
-            self.canvas.color_index = data["plot"]["color_index"]     
+            self.canvas.color_index = data["plot"]["color_index"]
+            #self.canvas.unit_current = data["plot"]["unit_current"]
+            #self.canvas.unit_concentration = data["plot"]["unit_concentration"]
 
             # Reconstruct data and gui
             for space_id, dataspace in dataspaces.items():
@@ -297,7 +342,10 @@ class MyMainWindow(QMainWindow):
             self.switch_dataspace(selected_space_id)
             self.set_active_dataspaces()
 
-            self.canvas.draw_plot()
+            self.set_current_unit(data["plot"]["unit_current"])
+            self.set_concentration_unit(data["plot"]["unit_concentration"])
+
+            self.canvas.draw_plot()        
 
             print("File loaded from:", file_name)
         except Exception as e:
@@ -319,16 +367,23 @@ class MyMainWindow(QMainWindow):
         
         result = self.canvas.calculate_results(datasets)
         concentrations, calculated_currents = zip(*result)
-        avg_currents, std_currents = zip(*calculated_currents)
+        avg_currents, _ = zip(*calculated_currents)
+
+        try:
+            _, _, _, trendline = self.canvas.calculate_trendline(concentrations, avg_currents)
+            #print(trendline)     
+        except Exception as e:
+            print(e)
+            return
 
         # Reverse the arrays if average currents are decreasing
         if avg_currents[0] > avg_currents[-1]:
-            avg_currents = avg_currents[::-1]
+            trendline = trendline[::-1]
             concentrations = concentrations[::-1]
 
         # Interpolate to find concentration corresponding to current
-        concentration = np.interp(current, avg_currents, concentrations)
-        if current < min(avg_currents) or current > max(avg_currents):
+        concentration = np.interp(current, trendline, concentrations)
+        if current < min(trendline) or current > max(trendline):
             concentration_text = "Out Of Range"
         else:
             concentration_text = str(round(concentration, 5))
@@ -352,8 +407,9 @@ class MyMainWindow(QMainWindow):
         checkbox_toggle_space.setChecked(space_toggled_on)
         checkbox_toggle_space.stateChanged.connect(lambda: self.set_active_dataspaces())
 
-        button_space = QPushButton(space_name, self)
+        button_space = EditableButton(space_name, self)
         button_space.clicked.connect(lambda: self.switch_dataspace(space_id))
+        button_space.btnTextEditingFinished.connect(lambda text: self.canvas.rename_dataspace(space_id, text))
         button_space.setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
 
         hbox = QHBoxLayout()
@@ -446,8 +502,10 @@ class MyMainWindow(QMainWindow):
 
 
     def on_dataspace_rename_clicked(self):
-        pass
-
+        space_id = self.canvas.selected_space_id
+        if space_id in self.widgets:
+            button_space: EditableButton = self.widgets[space_id]["dataspace_widgets"]["button_space"]
+            button_space.start_editing()
 
     def set_active_dataspaces(self):
         checked_space_ids = []
@@ -752,7 +810,68 @@ class CustomQLineEdit(QLineEdit):
         self.selectAll()
 
 
+class EditableButton(QPushButton):
+    btnTextEditingFinished = pyqtSignal(str)
+
+    def __init__(self, text='', parent=None):
+        super().__init__(text, parent)
+        self.setCheckable(False)
+        self.line_edit = None
+        self.currently_editing = False
+        self.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        # Start editing on double click
+        if obj == self and event.type() == event.Type.MouseButtonDblClick:
+            self.start_editing()
+            return True
+        # Finish editing if line edit loses focus without the text changing
+        elif obj == self.line_edit and event.type() == event.Type.FocusOut:
+            self.finish_editing()
+            return True
+        return super().eventFilter(obj, event)
+
+    def start_editing(self):      
+        if self.currently_editing:
+            return
+        
+        self.currently_editing = True
+        self.setStyleSheet("")
+        self.old_text = self.text()
+
+        # Create line edit on top of the button
+        self.line_edit = QLineEdit(self.old_text, self)
+        self.line_edit.selectAll()
+        self.line_edit.setFocus()
+        self.line_edit.editingFinished.connect(self.finish_editing)
+        #self.line_edit.textChanged.connect(self.textChanged.emit)
+        self.line_edit.setGeometry(self.rect())
+        self.line_edit.show()
+        self.line_edit.installEventFilter(self)
+
+    def finish_editing(self):
+        if not self.currently_editing:
+            return
+        
+        self.currently_editing = False
+        # Set button text to edited text
+        new_text = self.line_edit.text()
+        self.setText(new_text)
+
+        self.btnTextEditingFinished.emit(new_text)
+
+        # Delete line edit and reset stylesheet on button
+        self.line_edit.deleteLater()
+        self.setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
+
+
 class PlotCanvas(FigureCanvas):
+    # For type hints
+    figure: plt.Figure
+    axes1: Axes
+    axes2: Axes
+
+    # User toggleable info
     show_debug_info = True
     show_legend = True
     show_equation = True
@@ -763,12 +882,39 @@ class PlotCanvas(FigureCanvas):
     selected_space_id = 0 # Datasets within this space are drawn on the data plot
     active_spaces_ids = [0] # Results within these spaces are drawn on the results plot
 
-    dataspaces = {} # {0: {"name": "dataspace 0", "datasets: [dataset0, dataset1]"}, 1: ...}
-    #datasets = {}  # {0: {"name": "dataset 0", "times":[1,2,3], "currents":[1,2,3], "concentration":1, "notes":"foobar"}, 1: ..."}
-    hidden_datasets = {}  # Storage for toggled off datasets
-
     color_index = 0
     colors = []
+
+    unit_current = "mA"
+    unit_concentration = "mmol"
+
+    dataspaces = {}
+    '''
+    dataspaces structure:
+    {
+        0: { 
+            "name": "dataspace0", 
+            "notes": "lorem ipsum",
+            "datasets": {
+                0: {
+                    "name": "dataset0",
+                    "times": [0,1,2],
+                    "currents": [-0.1,-0.2,-0.3],
+                    "concentration": 5.0,
+                    "notes": "lorem ipsum",
+                    "hidden": False,
+                    "line_color": colors[0]
+                },
+                1: {
+                    ...
+                }
+            }
+        },
+        1: {
+            ...
+        }
+    }
+    '''
 
 
     def __init__(self, parent=None): 
@@ -889,6 +1035,9 @@ class PlotCanvas(FigureCanvas):
             self.draw_plot()
 
 
+        print(self.dataspaces[self.selected_space_id]["name"])
+
+
     def get_datasets(self, space_id: int = None):
         # If no id provided, get datasets in currently selected space
         if space_id == None:
@@ -920,42 +1069,19 @@ class PlotCanvas(FigureCanvas):
         self.span_initialized = False
         self.draw_plot()
 
-
-    '''def hide_dataset(self, set_id: int, space_id: int = None):
-        #datasets = self.get_datasets(space_id)   
-        #if set_id not in datasets:
-           # print(f"hide_dataset: Dataset with id '{set_id}' does not exist.")
-            #return
-        
-        if space_id == None:
-            space_id = self.selected_space_id
-        
-        if space_id not in self.hidden_datasets:
-            self.hidden_datasets[space_id] = {}
-        
-        datasets = self.get_datasets(space_id)   
-        hidden_dataset = datasets.pop(set_id)
-        self.hidden_datasets[space_id][set_id] = hidden_dataset
-
-        self.draw_plot()
     
-
-    def unhide_dataset(self, set_id: int, space_id: int = None):
-        #datasets = self.get_datasets(space_id)   
-        #if set_id not in self.hidden_datasets:
-        #    print(f"unhide_dataset: Dataset with id '{set_id}' does not exist.")
-        #    return
+    def rename_dataspace(self, space_id, name):
+        print(space_id) 
+        # Rename
+        if space_id in self.dataspaces:
+            self.dataspaces[space_id]["name"] = name
         
-        #datasets[set_id] = self.hidden_datasets.pop(set_id)
-        if space_id == None:
-            space_id = self.selected_space_id
-        
-        if space_id in self.hidden_datasets:
-            hidden_dataset = self.hidden_datasets[space_id].pop(set_id)
-            datasets = self.get_datasets(space_id)
-            datasets[set_id] = hidden_dataset
-
-        self.draw_plot()'''
+        # Redraw
+        labels = [self.dataspaces[space_id]["name"] for space_id in self.active_spaces_ids if space_id in self.dataspaces]
+        print(labels)
+        if self.show_legend:
+            self.axes2.legend(labels)
+        self.draw()
 
 
     def initialize_span(self, times):  
@@ -1002,10 +1128,8 @@ class PlotCanvas(FigureCanvas):
             concentrations, calculated_currents = zip(*result)
             avg_currents, std_currents = zip(*calculated_currents)
 
-            # Perform linear regression to get slope, intercept, and R-squared
-            slope, intercept = np.polyfit(concentrations, avg_currents, 1)
-            r_squared = np.corrcoef(concentrations, avg_currents)[0, 1]**2
-            trendline = slope * np.array(concentrations) + intercept
+            # Calculate trendline
+            slope, intercept, r_squared, trendline = self.calculate_trendline(concentrations, avg_currents)
 
             # Plot the data
             self.axes2.errorbar(concentrations, avg_currents, yerr=std_currents, marker="o", capsize=3, label=labels[i], color=tableau_colors[i])
@@ -1015,19 +1139,19 @@ class PlotCanvas(FigureCanvas):
             if self.show_equation:
                 equation_text = f"y = {slope:.4f}x + {intercept:.4f}"
                 r_squared_text = f"R² = {r_squared:.6f}"
-                self.axes2.text(0.1, i / 10 + 0.1, 
+                self.axes2.text(0.1, i / 15 + 0.1, 
                                 f"{equation_text}\n{r_squared_text}", 
                                 fontsize=12, 
                                 bbox=dict(facecolor=tableau_colors[i], alpha=0.3), 
                                 horizontalalignment="left", verticalalignment="center", 
                                 transform=self.axes2.transAxes)
 
-        # Set legend, grind, set labels
+        # Set legend, grind, set labels 
         if self.show_legend:
             self.axes2.legend()
         self.axes2.grid(True)
-        self.axes2.set_ylabel("current(µA)")
-        self.axes2.set_xlabel("concentration(mM)")
+        self.axes2.set_ylabel(f"current({self.unit_current})")
+        self.axes2.set_xlabel(f"concentration({self.unit_concentration})")
         
         # Set tick locations
         x_ticks = np.arange(start=min(concentrations), stop=max(concentrations) + 1)
@@ -1041,6 +1165,15 @@ class PlotCanvas(FigureCanvas):
         if self.show_debug_info and len(results) == 1:
             self.draw_debug_box(concentrations, avg_currents, std_currents, slope, intercept, trendline)
             #print(sorted_concentration_data)
+
+
+    def calculate_trendline(self, x, y):
+        # Perform linear regression to get slope, intercept, and R-squared
+        slope, intercept = np.polyfit(x, y, 1)
+        r_squared = np.corrcoef(x, y)[0, 1]**2
+        trendline = slope * np.array(x) + intercept
+
+        return slope, intercept, r_squared, trendline
 
 
     def calculate_results(self, datasets):
@@ -1102,7 +1235,7 @@ class PlotCanvas(FigureCanvas):
         if self.show_legend:
             self.axes1.legend()
         self.axes1.grid(True)
-        self.axes1.set_ylabel("current(µA)")
+        self.axes1.set_ylabel(f"current({self.unit_current})")
         self.axes1.set_xlabel("time(s)")
         
         # Set tick locations
@@ -1131,6 +1264,13 @@ class PlotCanvas(FigureCanvas):
                         bbox=dict(facecolor="blue", alpha=0.2), 
                         horizontalalignment="left", verticalalignment="center", 
                         transform=self.axes2.transAxes)
+        
+    
+    def update_plot_units(self):
+        self.axes1.set_ylabel(f"current({self.unit_current})")
+        self.axes2.set_ylabel(f"current({self.unit_current})")
+        self.axes2.set_xlabel(f"concentration({self.unit_concentration})")
+        self.draw()
         
 
 def main():
