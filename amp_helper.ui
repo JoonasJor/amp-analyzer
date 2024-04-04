@@ -218,21 +218,21 @@
     </property>
     <layout class="QHBoxLayout" name="horizontalLayout">
      <item>
-      <widget class="QPushButton" name="pushButton">
+      <widget class="QPushButton" name="pushButton_milliA">
        <property name="text">
         <string>mA</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="pushButton_2">
+      <widget class="QPushButton" name="pushButton_microA">
        <property name="text">
         <string>µA</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="pushButton_3">
+      <widget class="QPushButton" name="pushButton_nanoA">
        <property name="text">
         <string>nA</string>
        </property>
@@ -251,21 +251,21 @@
     </property>
     <layout class="QHBoxLayout" name="horizontalLayout_2">
      <item>
-      <widget class="QPushButton" name="pushButton_5">
+      <widget class="QPushButton" name="pushButton_millimol">
        <property name="text">
         <string>mmol</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="pushButton_6">
+      <widget class="QPushButton" name="pushButton_micromol">
        <property name="text">
         <string>μmol</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="pushButton_4">
+      <widget class="QPushButton" name="pushButton_nanomol">
        <property name="text">
         <string>nmol</string>
        </property>
