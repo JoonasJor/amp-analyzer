@@ -1,1 +1,1 @@
-# pstrace_helper
+# Amperometry analyzer
