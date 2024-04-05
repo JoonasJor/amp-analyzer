@@ -8,7 +8,7 @@ from PyQt6.QtCore import Qt, QFileInfo, pyqtSignal
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
-from matplotlib.widgets import RectangleSelector, SpanSelector
+from matplotlib.widgets import SpanSelector
 from matplotlib.axes import Axes
 import numpy as np
 import pandas as pd
@@ -631,7 +631,7 @@ class MyMainWindow(QMainWindow):
         concentration_widget = self.widgets[space_id]["dataset_widgets"][set_id]["line_edit_concentration"]
         # Check if input is numeric
         try:
-            float(input)
+            float(input)    
             concentration_widget.setStyleSheet("")
             return True
         except ValueError:
@@ -1095,10 +1095,6 @@ class PlotCanvas(FigureCanvas):
 
     def plot_results(self): 
         active_datasets = self.get_datasets_in_active_dataspaces()
-        #print(active_datasets[0]["name"])
-        #datasets = self.get_datasets_in_selected_dataspace()
-        #if datasets == None:
-            #return
         if len(active_datasets) == 0:
             self.axes2.clear()
             return
