@@ -2,7 +2,7 @@ import json
 import os
 import sys
 import traceback
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLineEdit, QPushButton, QHBoxLayout, QMessageBox, QFileDialog, QCheckBox, QLabel, QFrame
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLineEdit, QPushButton, QHBoxLayout, QMessageBox, QFileDialog, QCheckBox, QLabel, QFrame, QScrollArea
 from PyQt6.uic import loadUi
 from PyQt6.QtCore import Qt, QFileInfo, pyqtSignal
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -21,7 +21,10 @@ class MyMainWindow(QMainWindow):
     space_widget_id = 0
     set_widget_id = 0
     #button_add_dataset = None
-    layout_datasets = None
+    layout_datasets: QVBoxLayout
+    layout_dataspaces: QVBoxLayout
+    #datasets_content_layout: QVBoxLayout
+    #datasets_scroll_area: QScrollArea
     widgets = {}
     '''
     widgets structure:
@@ -58,7 +61,7 @@ class MyMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        loadUi("amp_helper.ui", self)
+        loadUi("amp_analyzer.ui", self)
         # Enable dropping onto the main window
         self.setAcceptDrops(True)
 
@@ -102,37 +105,35 @@ class MyMainWindow(QMainWindow):
 
         # Matplotlib navigation toolbar
         navigation_toolbar = NavigationToolbar(self.canvas, self)
-        self.verticalLayout_toolbox.addWidget(navigation_toolbar)
-        #self.verticalLayout_toolbox.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.horizontalLayout_toolbox.addWidget(navigation_toolbar)
+        #self.horizontalLayout_toolbox.setAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self.layout_datasets = QVBoxLayout(self.widget_datasets)
-        #self.widget_datasets.setStyleSheet("border: 1px solid grey;")  
+        # Create a widget to contain all the dynamically added content
+        #content_widget = QWidget()
 
-        label_spacer = QLabel(self)
-        label_spacer.setFixedWidth(40)
-        label_name = QLabel(self)
-        label_name.setText("Name")
-        label_name.setFixedWidth(100)
-        label_spacer2 = QLabel(self)
-        label_spacer2.setFixedWidth(5)
-        label_concentration = QLabel(self)
-        label_concentration.setText("Concentration")
-        label_name.setFixedWidth(50)
-        label_notes = QLabel(self)
-        label_notes.setText("Notes")
+        # Create a layout for the content widget
+        #self.datasets_content_layout = QVBoxLayout()
+        #self.datasets_content_layout.setVerticalPolicy()
+        #content_widget.setLayout(self.datasets_content_layout)
 
-        hbox = QHBoxLayout()
-        hbox.addWidget(label_spacer)
-        hbox.addWidget(label_name)
-        hbox.addWidget(label_spacer2)
-        hbox.addWidget(label_concentration)
-        hbox.addWidget(label_notes)
+        # Add the content widget to the scroll area
+        #scroll_area = QScrollArea()
+        #scroll_area.setWidget(content_widget)
+        #scroll_area.setWidgetResizable(True)
+        #scroll_area.setMaximumHeight(800)
+        #self.datasets_scroll_area = scroll_area
 
-        # Add hbox to parent layout
-        self.layout_datasets.addLayout(hbox)
+        #layout_datasets: QVBoxLayout = self.verticalLayout_datasets
+        #layout_datasets.addWidget(scroll_area)
+        
+        self.layout_datasets = QVBoxLayout(self.scrollAreaWidgetContents_datasets)
+        self.layout_dataspaces = QVBoxLayout(self.scrollAreaWidgetContents_dataspaces)
 
         # Initialize one dataspace
         self.add_dataspace_widget()
+        
+        # Reset focus
+        self.setFocus()
 
 
     def dragEnterEvent(self, event):
@@ -175,6 +176,11 @@ class MyMainWindow(QMainWindow):
         else:
             event.ignore()  # Ignore the close event
 
+
+    def resizeEvent(self, event):
+        # Call the parent class method
+        super().resizeEvent(event)
+        self.canvas.figure.tight_layout()
 
     def set_concentration_unit(self, unit: str):
         # Reset stylesheet on all buttons
@@ -406,18 +412,24 @@ class MyMainWindow(QMainWindow):
         checkbox_toggle_space = QCheckBox(self)
         checkbox_toggle_space.setChecked(space_toggled_on)
         checkbox_toggle_space.stateChanged.connect(lambda: self.set_active_dataspaces())
+        #checkbox_toggle_space.setFixedHeight(15)
 
         button_space = EditableButton(space_name, self)
         button_space.clicked.connect(lambda: self.switch_dataspace(space_id))
         button_space.btnTextEditingFinished.connect(lambda text: self.canvas.rename_dataspace(space_id, text))
         button_space.setStyleSheet("background-color: rgba(128, 128, 255, 0.3)")
+        button_space.setFixedHeight(28)
+        button_space.setFixedWidth(160)
 
         hbox = QHBoxLayout()
         hbox.addWidget(checkbox_toggle_space)
-        hbox.addWidget(button_space, stretch=1)
+        hbox.addWidget(button_space)
+        hbox.setContentsMargins(0, 0, 0, 0)
 
-        self.verticalLayout_dataspaces.addLayout(hbox)
-        self.verticalLayout_dataspaces.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.layout_dataspaces.addLayout(hbox)
+        self.layout_dataspaces.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        #self.verticalLayout_dataspaces.setContentsMargins(0, 0, 0, 0)
+        #self.verticalLayout_dataspaces.setSpacing(0)
 
         # Store references to the widgets for later access
         self.widgets[space_id] = { 
@@ -565,11 +577,12 @@ class MyMainWindow(QMainWindow):
         hbox.addWidget(line_edit_name)
         hbox.addWidget(line_edit_concentration)
         hbox.addWidget(line_edit_notes)
-        #hbox.addWidget(button_paste)
 
         # Add hbox to parent layout
         self.layout_datasets.addLayout(hbox)
         self.layout_datasets.setAlignment(Qt.AlignmentFlag.AlignTop)
+        #self.datasets_content_layout.setSizeConstraint(QLayout.SetMinAndMaxSize)
+        #self.datasets_scroll_area.updateGeometry()
 
         # Move "add dataset" button to bottom by removing and readding it
         #if set_id > 0:
@@ -921,13 +934,13 @@ class PlotCanvas(FigureCanvas):
         self.figure, (self.axes1, self.axes2) = plt.subplots(1, 2)
         super().__init__(self.figure)
         self.setParent(parent)
+        #self.figure.tight_layout()
 
         # Create color table
         tableau_colors = mcolors.TABLEAU_COLORS
         css4_colors = mcolors.CSS4_COLORS
         self.colors = list(tableau_colors.values()) + list(css4_colors.values())
-        print(len(tableau_colors))
-
+     
 
     def set_selected_space_id(self, space_id: int, update_plot = True):
         self.selected_space_id = space_id
@@ -1033,7 +1046,6 @@ class PlotCanvas(FigureCanvas):
             self.initialize_span(times)
         if update_plot:
             self.draw_plot()
-
 
         print(self.dataspaces[self.selected_space_id]["name"])
 
@@ -1229,7 +1241,7 @@ class PlotCanvas(FigureCanvas):
         
         # Set legend, grind, set labels
         if self.show_legend:
-            self.axes1.legend()
+            self.axes1.legend(loc="lower left")
         self.axes1.grid(True)
         self.axes1.set_ylabel(f"current({self.unit_current})")
         self.axes1.set_xlabel("time(s)")
@@ -1272,6 +1284,7 @@ class PlotCanvas(FigureCanvas):
 def main():
     app = QApplication(sys.argv)
     window = MyMainWindow()
+    window.setWindowTitle("Amp Analyzer")
     window.show()
     sys.exit(app.exec())
 
