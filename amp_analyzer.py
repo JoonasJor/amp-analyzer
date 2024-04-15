@@ -370,15 +370,19 @@ class MyMainWindow(QMainWindow):
             self.lineEdit_convert_concentration.setText("Out Of Range")
             return
         
-        result = self.canvas.calculate_results(datasets)
-        concentrations, calculated_currents = zip(*result)
-        avg_currents, _ = zip(*calculated_currents)
-
         try:
+            result = self.canvas.calculate_results(datasets)
+            if len(result) < 2:
+                self.lineEdit_convert_concentration.setText("Out Of Range")
+                return
+            
+            concentrations, calculated_currents = zip(*result)
+            avg_currents, _ = zip(*calculated_currents) 
             _, _, _, trendline = self.canvas.calculate_trendline(concentrations, avg_currents)
             #print(trendline)     
         except Exception as e:
             print(e)
+            traceback.print_exc()
             return
 
         # Reverse the arrays if average currents are decreasing
@@ -539,6 +543,8 @@ class MyMainWindow(QMainWindow):
             self.set_widget_id += 1
         if space_id == None: 
             space_id = self.canvas.selected_space_id
+
+        print(space_id)
         
         line_edit_name = QLineEdit(self)
         if name == None:
@@ -589,6 +595,9 @@ class MyMainWindow(QMainWindow):
             "line_edit_notes": line_edit_notes#,
             #"button_paste": button_paste
         }
+
+        if not space_id in self.widgets:
+            space_id = self.add_dataspace_widget(initialize_dataset=False)
         self.widgets[space_id]["dataset_widgets"][set_id] = dataset_widget
 
         return set_id
@@ -1137,9 +1146,10 @@ class PlotCanvas(FigureCanvas):
 
         active_datasets = self.get_datasets_in_active_dataspaces()
         if len(active_datasets) == 0:
-            self.axes2.clear()
+            info_text = "No sets enabled"
+            self.display_results_info_text(info_text)
             return
-        
+   
         results = []
         for dataset in active_datasets:
             result = self.calculate_results(dataset)
@@ -1156,11 +1166,8 @@ class PlotCanvas(FigureCanvas):
                 return
             
             if len(result) < 2:
-                self.axes2.clear()
-                self.axes2.set_ylabel("current(µA)")
-                self.axes2.set_xlabel("concentration(mM)")
-                info_text = "Add atleast 2 different concentrations"
-                self.axes2.text(0.5, 0.5, info_text, fontsize=10, horizontalalignment="center", verticalalignment="center", transform=self.axes2.transAxes)
+                info_text = f"Add atleast 2 different concentrations \n to \"{labels[i]}\""
+                self.display_results_info_text(info_text)
                 return
             
             # Unpack data
@@ -1212,7 +1219,14 @@ class PlotCanvas(FigureCanvas):
         if self.show_debug_info and len(results) == 1:
             self.draw_debug_box(concentrations, avg_currents, std_currents, slope, intercept, trendline)
             #print(sorted_concentration_data)
+    
 
+    def display_results_info_text(self, text):
+        self.axes2.clear()
+        self.axes2.set_title("Results")
+        self.axes2.set_ylabel(f"current({self.unit_current})")
+        self.axes2.set_xlabel(f"concentration({self.unit_concentration})")
+        self.axes2.text(0.5, 0.5, text, fontsize=10, horizontalalignment="center", verticalalignment="center", transform=self.axes2.transAxes)
 
     def calculate_trendline(self, x, y):
         # Perform linear regression to get slope, intercept, and R-squared
