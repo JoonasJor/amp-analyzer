@@ -71,7 +71,8 @@ class MyMainWindow(QMainWindow):
         layout.setContentsMargins(2, 2, 2, 2)
 
         # Menu button signals
-        self.actionImport_data_from_CSV.triggered.connect(self.on_import_data_from_csv_clicked)
+        #self.actionImport_data_from_XLSX.triggered.connect(self.on_import_data_from_csv_clicked)
+        #self.actionImport_data_from_CSV.triggered.connect(self.on_import_data_from_csv_clicked)
         self.actionImport_data_from_PSSESSION.triggered.connect(self.on_import_data_from_pssession_clicked)
         self.actionDebug_Info.triggered.connect(self.canvas.toggle_debug_info)
         self.actionLegend.triggered.connect(self.canvas.toggle_legend)
