@@ -81,7 +81,7 @@ class MyMainWindow(QMainWindow):
         self.actionLoad.triggered.connect(lambda: self.on_load_clicked(ask_for_file_location=True))
 
         # Dataspace button signals
-        self.pushButton_dataspace_add.clicked.connect(lambda: self.add_dataspace_widget())
+        self.pushButton_dataspace_add.clicked.connect(lambda: self.add_dataspace_widget(initialize_dataset=True))
         self.pushButton_dataspace_remove.clicked.connect(lambda:self.on_dataspace_remove_clicked())
         self.pushButton_dataspace_rename.clicked.connect(lambda:self.on_dataspace_rename_clicked())
 
@@ -111,7 +111,7 @@ class MyMainWindow(QMainWindow):
         self.layout_dataspaces = QVBoxLayout(self.scrollAreaWidgetContents_dataspaces)
 
         # Initialize one dataspace
-        self.add_dataspace_widget()
+        self.add_dataspace_widget(initialize_dataset=True)
         
         # Reset focus
         self.setFocus()
@@ -261,10 +261,11 @@ class MyMainWindow(QMainWindow):
             if not os.path.exists(filepath):
                 return
 
-        # Delete currents widgets   
+        # Delete currents widgets  
         space_ids = list(self.widgets.keys())
-        for space_id in space_ids:
-            self.on_dataspace_remove_clicked(space_id)
+        if space_ids:
+            for space_id in space_ids:
+                self.on_dataspace_remove_clicked(space_id)
 
         # Read pickled data
         try:
@@ -1108,8 +1109,11 @@ class PlotCanvas(FigureCanvas):
         # If no id provided, delete currently selected space
         if space_id == None:
             space_id = self.selected_space_id
-        print(self.dataspaces.keys())
-        print(space_id)
+        #print(self.dataspaces.keys())
+        #print(space_id)
+        if not space_id in self.dataspaces:
+            return
+            
         self.dataspaces.pop(space_id)
         self.span_initialized = False
         self.draw_plot()
