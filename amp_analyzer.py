@@ -2,7 +2,14 @@ import json
 import os
 import sys
 import traceback
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLineEdit, QPushButton, QHBoxLayout, QMessageBox, QFileDialog, QCheckBox, QLabel, QFrame, QScrollArea
+import numpy as np
+import pandas as pd
+import pyperclip
+import pickle
+from threading import Timer
+from datetime import datetime
+from io import StringIO
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLineEdit, QPushButton, QHBoxLayout, QMessageBox, QFileDialog, QCheckBox, QApplication
 from PyQt6.uic import loadUi
 from PyQt6.QtCore import Qt, QFileInfo, pyqtSignal
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -10,21 +17,14 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 from matplotlib.widgets import SpanSelector
 from matplotlib.axes import Axes
-import numpy as np
-import pandas as pd
-import pyperclip
-import pickle
 import matplotlib.colors as mcolors
-from io import StringIO
+
 
 class MyMainWindow(QMainWindow):
     space_widget_id = 0
     set_widget_id = 0
-    #button_add_dataset = None
     layout_datasets: QVBoxLayout
     layout_dataspaces: QVBoxLayout
-    #datasets_content_layout: QVBoxLayout
-    #datasets_scroll_area: QScrollArea
     widgets = {}
     '''
     widgets structure:
@@ -71,17 +71,18 @@ class MyMainWindow(QMainWindow):
         layout.setContentsMargins(2, 2, 2, 2)
 
         # Menu button signals
-        self.actionImport_data_from_CSV.triggered.connect(self.on_import_data_from_csv_clicked)
+        #self.actionImport_data_from_XLSX.triggered.connect(self.on_import_data_from_csv_clicked)
+        #self.actionImport_data_from_CSV.triggered.connect(self.on_import_data_from_csv_clicked)
         self.actionImport_data_from_PSSESSION.triggered.connect(self.on_import_data_from_pssession_clicked)
         self.actionDebug_Info.triggered.connect(self.canvas.toggle_debug_info)
         self.actionLegend.triggered.connect(self.canvas.toggle_legend)
         self.actionEquation.triggered.connect(self.canvas.toggle_equation)
-        self.actionSave.triggered.connect(lambda: self.on_save_clicked(ask_for_save_location=False))
-        self.actionSave_as.triggered.connect(lambda: self.on_save_clicked(ask_for_save_location=True))
-        self.actionLoad.triggered.connect(lambda: self.on_load_clicked())
+        self.actionSave.triggered.connect(lambda: self.on_save_clicked(ask_for_file_location=False))
+        self.actionSave_as.triggered.connect(lambda: self.on_save_clicked(ask_for_file_location=True))
+        self.actionLoad.triggered.connect(lambda: self.on_load_clicked(ask_for_file_location=True))
 
         # Dataspace button signals
-        self.pushButton_dataspace_add.clicked.connect(lambda: self.add_dataspace_widget())
+        self.pushButton_dataspace_add.clicked.connect(lambda: self.add_dataspace_widget(initialize_dataset=True))
         self.pushButton_dataspace_remove.clicked.connect(lambda:self.on_dataspace_remove_clicked())
         self.pushButton_dataspace_rename.clicked.connect(lambda:self.on_dataspace_rename_clicked())
 
@@ -106,34 +107,18 @@ class MyMainWindow(QMainWindow):
         # Matplotlib navigation toolbar
         navigation_toolbar = NavigationToolbar(self.canvas, self)
         self.horizontalLayout_toolbox.addWidget(navigation_toolbar)
-        #self.horizontalLayout_toolbox.setAlignment(Qt.AlignmentFlag.AlignRight)
-
-        # Create a widget to contain all the dynamically added content
-        #content_widget = QWidget()
-
-        # Create a layout for the content widget
-        #self.datasets_content_layout = QVBoxLayout()
-        #self.datasets_content_layout.setVerticalPolicy()
-        #content_widget.setLayout(self.datasets_content_layout)
-
-        # Add the content widget to the scroll area
-        #scroll_area = QScrollArea()
-        #scroll_area.setWidget(content_widget)
-        #scroll_area.setWidgetResizable(True)
-        #scroll_area.setMaximumHeight(800)
-        #self.datasets_scroll_area = scroll_area
-
-        #layout_datasets: QVBoxLayout = self.verticalLayout_datasets
-        #layout_datasets.addWidget(scroll_area)
         
         self.layout_datasets = QVBoxLayout(self.scrollAreaWidgetContents_datasets)
         self.layout_dataspaces = QVBoxLayout(self.scrollAreaWidgetContents_dataspaces)
 
         # Initialize one dataspace
-        self.add_dataspace_widget()
+        self.add_dataspace_widget(initialize_dataset=True)
         
         # Reset focus
         self.setFocus()
+
+        #QApplication.processEvents()
+        self.rt = RepeatedTimer(60, lambda: self.on_save_clicked(False, "autosave")) # it auto-starts, no need of rt.start()
 
 
     def dragEnterEvent(self, event):
@@ -172,15 +157,11 @@ class MyMainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
 
         if reply == QMessageBox.StandardButton.Yes:
+            self.rt.stop()
             event.accept()  # Allow the window to close
         else:
             event.ignore()  # Ignore the close event
 
-
-    def resizeEvent(self, event):
-        # Call the parent class method
-        super().resizeEvent(event)
-        self.canvas.figure.tight_layout()
 
     def set_concentration_unit(self, unit: str):
         # Reset stylesheet on all buttons
@@ -218,11 +199,21 @@ class MyMainWindow(QMainWindow):
         self.canvas.update_plot_units()
 
 
-    def on_save_clicked(self, ask_for_save_location: bool):
-        default_name = "data.pickle"
-        file_name, _ = QFileDialog.getSaveFileName(self, "Save File", default_name, "Pickle Files (*.pickle)")
+    def on_save_clicked(self, ask_for_file_location: bool, file_name = None):
+        if file_name == None:
+            current_datetime = datetime.now()
+            file_name = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
+        
+        if ask_for_file_location:
+            filepath, _ = QFileDialog.getSaveFileName(self, "Save File", file_name, "Pickle Files (*.pickle)")
+        else:
+            # Get the current working directory
+            folder = os.getcwd()
+            
+            # Generate the file name based on current date and time
+            filepath = os.path.join(folder, f"{file_name}.pickle")
 
-        if not file_name:
+        if not filepath:
             return
         
         # Add all pickleable objects to a dict
@@ -252,27 +243,34 @@ class MyMainWindow(QMainWindow):
 
         # Use pickle to write the dict into a file
         try:
-            with open(file_name, "wb") as file:
+            with open(filepath, "wb") as file:
                 pickle.dump(data, file)
-            print("File saved at:", file_name)
+            print("File saved at:", filepath)
         except Exception as e:
             print(f"on_save_clicked: {e}")
 
 
-    def on_load_clicked(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Load File", "", "Pickle Files (*.pickle)")
+    def on_load_clicked(self, ask_for_file_location: bool):
+        if ask_for_file_location:
+            filepath, _ = QFileDialog.getOpenFileName(self, "Load File", "", "Pickle Files (*.pickle)")
+            if not filepath:
+                return
+        else:          
+            # Try loading from autosave   
+            folder = os.getcwd()
+            filepath = os.path.join(folder, "autosave.pickle")
+            if not os.path.exists(filepath):
+                return
 
-        if not file_name:
-            return
-
-        # Delete currents widgets   
+        # Delete currents widgets  
         space_ids = list(self.widgets.keys())
-        for space_id in space_ids:
-            self.on_dataspace_remove_clicked(space_id)
+        if space_ids:
+            for space_id in space_ids:
+                self.on_dataspace_remove_clicked(space_id)
 
         # Read pickled data
         try:
-            with open(file_name, "rb") as file:
+            with open(filepath, "rb") as file:
                 data = pickle.load(file)
 
             space_widget_id = data["window"]["space_widget_id"]
@@ -344,6 +342,9 @@ class MyMainWindow(QMainWindow):
             self.canvas.span_initialized = False
 
             self.lineEdit_convert_current.setText(data["window"]["current_convert_value"])
+            self.actionDebug_Info.setChecked(self.canvas.show_debug_info)
+            self.actionLegend.setChecked(self.canvas.show_legend)
+            self.actionEquation.setChecked(self.canvas.show_equation)
 
             self.switch_dataspace(selected_space_id)
             self.set_active_dataspaces()
@@ -353,7 +354,7 @@ class MyMainWindow(QMainWindow):
 
             self.canvas.draw_plot()        
 
-            print("File loaded from:", file_name)
+            print("File loaded from:", filepath)
         except Exception as e:
             print(f"An error occurred while loading: {e}")
             traceback.print_exc()
@@ -371,15 +372,19 @@ class MyMainWindow(QMainWindow):
             self.lineEdit_convert_concentration.setText("Out Of Range")
             return
         
-        result = self.canvas.calculate_results(datasets)
-        concentrations, calculated_currents = zip(*result)
-        avg_currents, _ = zip(*calculated_currents)
-
         try:
+            result = self.canvas.calculate_results(datasets)
+            if len(result) < 2:
+                self.lineEdit_convert_concentration.setText("Out Of Range")
+                return
+            
+            concentrations, calculated_currents = zip(*result)
+            avg_currents, _ = zip(*calculated_currents) 
             _, _, _, trendline = self.canvas.calculate_trendline(concentrations, avg_currents)
             #print(trendline)     
         except Exception as e:
             print(e)
+            traceback.print_exc()
             return
 
         # Reverse the arrays if average currents are decreasing
@@ -540,6 +545,8 @@ class MyMainWindow(QMainWindow):
             self.set_widget_id += 1
         if space_id == None: 
             space_id = self.canvas.selected_space_id
+
+        print(space_id)
         
         line_edit_name = QLineEdit(self)
         if name == None:
@@ -581,15 +588,6 @@ class MyMainWindow(QMainWindow):
         # Add hbox to parent layout
         self.layout_datasets.addLayout(hbox)
         self.layout_datasets.setAlignment(Qt.AlignmentFlag.AlignTop)
-        #self.datasets_content_layout.setSizeConstraint(QLayout.SetMinAndMaxSize)
-        #self.datasets_scroll_area.updateGeometry()
-
-        # Move "add dataset" button to bottom by removing and readding it
-        #if set_id > 0:
-        #    self.layout_datasets.removeWidget(self.button_add_dataset)
-        #self.button_add_dataset = QPushButton("Add New", self)
-        #self.button_add_dataset.clicked.connect(lambda: self.add_dataset_widget())
-        #self.layout_datasets.addWidget(self.button_add_dataset)
 
         # Store references to the widgets for later access
         dataset_widget = {
@@ -599,6 +597,9 @@ class MyMainWindow(QMainWindow):
             "line_edit_notes": line_edit_notes#,
             #"button_paste": button_paste
         }
+
+        if not space_id in self.widgets:
+            space_id = self.add_dataspace_widget(initialize_dataset=False)
         self.widgets[space_id]["dataset_widgets"][set_id] = dataset_widget
 
         return set_id
@@ -817,6 +818,31 @@ class MyMainWindow(QMainWindow):
         return values
     
 
+class RepeatedTimer(object):
+    def __init__(self, interval, function, *args, **kwargs):
+        self._timer     = None
+        self.interval   = interval
+        self.function   = function
+        self.args       = args
+        self.kwargs     = kwargs
+        self.is_running = False
+        self.start()
+
+    def _run(self):
+        self.is_running = False
+        self.start()
+        self.function(*self.args, **self.kwargs)
+
+    def start(self):
+        if not self.is_running:
+            self._timer = Timer(self.interval, self._run)
+            self._timer.start()
+            self.is_running = True
+
+    def stop(self):
+        self._timer.cancel()
+
+
 class CustomQLineEdit(QLineEdit):
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
@@ -885,9 +911,14 @@ class PlotCanvas(FigureCanvas):
     axes2: Axes
 
     # User toggleable info
-    show_debug_info = True
+    show_debug_info = False
     show_legend = True
     show_equation = True
+    show_data = False
+    show_results = True
+
+    equation_textboxes = []
+    plot_legend = None
 
     span = None
     span_initialized = False
@@ -940,6 +971,8 @@ class PlotCanvas(FigureCanvas):
         tableau_colors = mcolors.TABLEAU_COLORS
         css4_colors = mcolors.CSS4_COLORS
         self.colors = list(tableau_colors.values()) + list(css4_colors.values())
+
+        self.textbox_pick_cid = self.mpl_connect("pick_event", self.on_pick)
      
 
     def set_selected_space_id(self, space_id: int, update_plot = True):
@@ -1012,6 +1045,8 @@ class PlotCanvas(FigureCanvas):
 
     def add_dataset(self, set_id, set_name, space_name, space_notes, times, currents, concentration, notes, update_plot = True, space_id = None, hidden = False, color = None):
         if color == None:
+            if self.color_index > len(self.colors) - 1:
+                self.color_index = 0
             color = self.colors[self.color_index]
         self.color_index += 1
 
@@ -1075,8 +1110,11 @@ class PlotCanvas(FigureCanvas):
         # If no id provided, delete currently selected space
         if space_id == None:
             space_id = self.selected_space_id
-        print(self.dataspaces.keys())
-        print(space_id)
+        #print(self.dataspaces.keys())
+        #print(space_id)
+        if not space_id in self.dataspaces:
+            return
+            
         self.dataspaces.pop(space_id)
         self.span_initialized = False
         self.draw_plot()
@@ -1106,11 +1144,17 @@ class PlotCanvas(FigureCanvas):
         
 
     def plot_results(self): 
+        #if not self.show_results:
+        #    self.axes2.set_visible(False)
+        #    return
+        #self.axes2.set_visible(True)
+
         active_datasets = self.get_datasets_in_active_dataspaces()
         if len(active_datasets) == 0:
-            self.axes2.clear()
+            info_text = "No sets enabled"
+            self.display_results_info_text(info_text)
             return
-        
+   
         results = []
         for dataset in active_datasets:
             result = self.calculate_results(dataset)
@@ -1120,16 +1164,15 @@ class PlotCanvas(FigureCanvas):
         tableau_colors = list(mcolors.TABLEAU_COLORS)
         labels = [self.dataspaces[space_id]["name"] for space_id in self.active_spaces_ids if space_id in self.dataspaces] # active_datasets or results dont have dataspace names. fix later
 
+        self.equation_textboxes = []
+
         for i, result in enumerate(results):
             if result == None:
                 return
             
             if len(result) < 2:
-                self.axes2.clear()
-                self.axes2.set_ylabel("current(µA)")
-                self.axes2.set_xlabel("concentration(mM)")
-                info_text = "Add atleast 2 different concentrations"
-                self.axes2.text(0.5, 0.5, info_text, fontsize=10, horizontalalignment="center", verticalalignment="center", transform=self.axes2.transAxes)
+                info_text = f"Add atleast 2 different concentrations \n to \"{labels[i]}\""
+                self.display_results_info_text(info_text)
                 return
             
             # Unpack data
@@ -1147,17 +1190,25 @@ class PlotCanvas(FigureCanvas):
             if self.show_equation:
                 equation_text = f"y = {slope:.4f}x + {intercept:.4f}"
                 r_squared_text = f"R² = {r_squared:.6f}"
-                self.axes2.text(0.1, i / 15 + 0.1, 
-                                f"{equation_text}\n{r_squared_text}", 
-                                fontsize=12, 
-                                bbox=dict(facecolor=tableau_colors[i], alpha=0.3), 
-                                horizontalalignment="left", verticalalignment="center", 
-                                transform=self.axes2.transAxes)
+                text_x = 0.05
+                text_y = i / (self.height() * 0.02) + 0.07
+                equation_textbox = self.axes2.text(
+                    text_x, text_y, 
+                    f"{equation_text}\n{r_squared_text}", 
+                    fontsize=9, 
+                    bbox=dict(facecolor=tableau_colors[i], alpha=0.3), 
+                    horizontalalignment="left", verticalalignment="center", 
+                    transform=self.axes2.transAxes,
+                    picker=True
+                )
+                # Save text boxes for repositioning them later
+                self.equation_textboxes.append(equation_textbox)
 
-        # Set legend, grind, set labels 
+        # Set legend, grid, title, labels 
         if self.show_legend:
-            self.axes2.legend()
+            self.axes2.legend(fontsize=9)
         self.axes2.grid(True)
+        self.axes2.set_title("Results")
         self.axes2.set_ylabel(f"current({self.unit_current})")
         self.axes2.set_xlabel(f"concentration({self.unit_concentration})")
         
@@ -1173,7 +1224,14 @@ class PlotCanvas(FigureCanvas):
         if self.show_debug_info and len(results) == 1:
             self.draw_debug_box(concentrations, avg_currents, std_currents, slope, intercept, trendline)
             #print(sorted_concentration_data)
+    
 
+    def display_results_info_text(self, text):
+        self.axes2.clear()
+        self.axes2.set_title("Results")
+        self.axes2.set_ylabel(f"current({self.unit_current})")
+        self.axes2.set_xlabel(f"concentration({self.unit_concentration})")
+        self.axes2.text(0.5, 0.5, text, fontsize=10, horizontalalignment="center", verticalalignment="center", transform=self.axes2.transAxes)
 
     def calculate_trendline(self, x, y):
         # Perform linear regression to get slope, intercept, and R-squared
@@ -1218,6 +1276,13 @@ class PlotCanvas(FigureCanvas):
 
 
     def plot_data(self):
+        #if not self.show_data:
+        #   self.axes1.set_visible(False)
+        #   self.axes1.set_axis_off()
+        #   self.figure.delaxes(self.axes1)
+        #    return
+        #self.axes1.set_visible(True)
+
         # Clear existing plot
         self.axes1.clear()
 
@@ -1239,10 +1304,12 @@ class PlotCanvas(FigureCanvas):
             line_color = data['line_color']
             self.axes1.plot(times, currents, label=name, color=line_color)
         
-        # Set legend, grind, set labels
         if self.show_legend:
-            self.axes1.legend(loc="lower left")
+            self.update_legend()
+
+        # Set grid, labels, title
         self.axes1.grid(True)
+        self.axes1.set_title(self.dataspaces[self.selected_space_id]["name"])
         self.axes1.set_ylabel(f"current({self.unit_current})")
         self.axes1.set_xlabel("time(s)")
         
@@ -1279,14 +1346,59 @@ class PlotCanvas(FigureCanvas):
         self.axes2.set_ylabel(f"current({self.unit_current})")
         self.axes2.set_xlabel(f"concentration({self.unit_concentration})")
         self.draw()
+    
+    def update_legend(self):
+        if not self.show_legend:
+            return
         
+        self.plot_legend = self.axes1.legend(loc="lower left", fontsize=9)
+        legend_height = self.plot_legend.get_window_extent().max[1]
+        plot_height = self.height()
+        print(legend_height, plot_height)
+        if legend_height > plot_height - 30:
+            self.plot_legend.remove()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        if self.equation_textboxes:     
+            for i, textbox in enumerate(self.equation_textboxes):
+                x = 0.05
+                y = i / (self.height() * 0.02) + 0.07
+                textbox.set_position((x, y))
+
+        if self.plot_legend:
+            self.update_legend()
+        
+        self.figure.tight_layout()
+
+    def on_pick(self, event):
+        print(event.artist)
+        
+        artist: plt.Text = event.artist
+        text = artist.get_text()
+        QApplication.clipboard().setText(text)
+
+        old_alpha = artist.get_bbox_patch().get_alpha()
+
+        artist.get_bbox_patch().set_alpha(0.7)
+        self.draw()
+        
+        Timer(0.05, lambda: self.reset_textbox_alpha(artist, old_alpha)).start()
+
+    def reset_textbox_alpha(self, textbox: plt.Text, old_alpha):
+        textbox.get_bbox_patch().set_alpha(old_alpha)
+        self.draw()
+            
 
 def main():
     app = QApplication(sys.argv)
     window = MyMainWindow()
     window.setWindowTitle("Amp Analyzer")
     window.show()
-    sys.exit(app.exec())
+    #app.processEvents()  
+    window.on_load_clicked(ask_for_file_location=False)
+    sys.exit(app.exec()) 
 
 
 if __name__ == "__main__":
