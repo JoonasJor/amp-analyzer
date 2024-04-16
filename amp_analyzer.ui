@@ -661,7 +661,7 @@
      <string>File</string>
     </property>
     <addaction name="actionImport_data_from_CSV"/>
-    <addaction name="actionImport_data_from_xlsx"/>
+    <addaction name="actionImport_data_from_XLSX"/>
     <addaction name="actionImport_data_from_PSSESSION"/>
     <addaction name="separator"/>
     <addaction name="actionSave"/>
@@ -685,7 +685,7 @@
     <string>Import data from CSV</string>
    </property>
   </action>
-  <action name="actionImport_data_from_xlsx">
+  <action name="actionImport_data_from_XLSX">
    <property name="text">
     <string>Import data from XLSX</string>
    </property>
