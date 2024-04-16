@@ -148,7 +148,11 @@ class MyMainWindow(QMainWindow):
         if individual_files:
             filepaths.extend([file for file in individual_files if file.endswith('.pssession')])
 
-        self.handle_pssession_data(sorted(filepaths))
+        space_id = self.canvas.selected_space_id
+        if len(self.canvas.dataspaces[space_id]["datasets"]) > 0:
+            ret = self.msg_box_overwrite(space_id)
+            if ret == 1:
+                self.handle_pssession_data(sorted(filepaths))
 
 
     def closeEvent(self, event):
@@ -733,6 +737,11 @@ class MyMainWindow(QMainWindow):
         #print("Selected file:", filepaths)
         space_id = self.canvas.selected_space_id
         if len(self.canvas.dataspaces[space_id]["datasets"]) > 0:
+            ret = self.msg_box_overwrite(space_id)
+            if ret == 1:
+                self.handle_pssession_data(filepaths)
+
+    def msg_box_overwrite(self, space_id):
             msgBox = QMessageBox()
             msgBox.setWindowTitle("Dataset Exists")
             msgBox.setText("Overwrite existing dataset?")
@@ -744,18 +753,20 @@ class MyMainWindow(QMainWindow):
 
             if ret == QMessageBox.StandardButton.Cancel:
                 # Cancel action
-                return
+                return 0
             elif ret == QMessageBox.StandardButton.Yes:
                 # Delete widgets
                 set_ids = list(self.widgets[space_id]["dataset_widgets"].keys())
-                print(set_ids)
+                #print(set_ids)
                 for set_id in set_ids:
                     self.delete_dataset_widget(set_id)
                 # Delete existing dataspace
-                self.canvas.delete_dataspace()
-        self.handle_pssession_data(filepaths)
-
-
+                #self.canvas.delete_dataspace()
+                self.canvas.dataspaces[self.canvas.selected_space_id]["datasets"] = {}
+                return 1
+            elif ret == QMessageBox.StandardButton.No:
+                return 1
+                
     def handle_pssession_data(self, filepaths):
         for filepath in filepaths:
             with open(filepath, encoding="utf-16-le") as f:
