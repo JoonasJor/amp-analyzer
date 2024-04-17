@@ -662,7 +662,7 @@
     </property>
     <addaction name="actionImport_data_from_CSV"/>
     <addaction name="actionImport_data_from_XLSX"/>
-    <addaction name="actionImport_data_from_PSSESSION"/>
+    <addaction name="actionImport_data_from_PSSESSION_PST"/>
     <addaction name="separator"/>
     <addaction name="actionSave"/>
     <addaction name="actionSave_as"/>
@@ -703,9 +703,9 @@
     <string>Automatic Import</string>
    </property>
   </action>
-  <action name="actionImport_data_from_PSSESSION">
+  <action name="actionImport_data_from_PSSESSION_PST">
    <property name="text">
-    <string>Import data from PSSESSION</string>
+    <string>Import data from PSSESSION/PST</string>
    </property>
   </action>
   <action name="actionDebug_Info">
