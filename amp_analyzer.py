@@ -4,11 +4,9 @@ import sys
 import traceback
 import numpy as np
 import pandas as pd
-import pyperclip
 import pickle
 from threading import Timer
 from datetime import datetime
-from io import StringIO
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLineEdit, QPushButton, QHBoxLayout, QMessageBox, QFileDialog, QCheckBox, QApplication
 from PyQt6.uic import loadUi
 from PyQt6.QtCore import Qt, QFileInfo, pyqtSignal
@@ -73,7 +71,7 @@ class MyMainWindow(QMainWindow):
         # Menu button signals
         #self.actionImport_data_from_XLSX.triggered.connect(self.on_import_data_from_csv_clicked)
         #self.actionImport_data_from_CSV.triggered.connect(self.on_import_data_from_csv_clicked)
-        self.actionImport_data_from_PSSESSION.triggered.connect(self.on_import_data_from_pssession_clicked)
+        self.actionImport_data_from_PSSESSION_PST.triggered.connect(self.on_import_data_from_pssession_pst_clicked)
         self.actionDebug_Info.triggered.connect(self.canvas.toggle_debug_info)
         self.actionLegend.triggered.connect(self.canvas.toggle_legend)
         self.actionEquation.triggered.connect(self.canvas.toggle_equation)
@@ -113,11 +111,8 @@ class MyMainWindow(QMainWindow):
 
         # Initialize one dataspace
         self.add_dataspace_widget(initialize_dataset=True)
-        
-        # Reset focus
         self.setFocus()
 
-        #QApplication.processEvents()
         self.rt = RepeatedTimer(60, lambda: self.on_save_clicked(False, "autosave")) # it auto-starts, no need of rt.start()
 
 
@@ -144,15 +139,15 @@ class MyMainWindow(QMainWindow):
         if folders:
             for folder in folders:
                 for root, _, filenames in os.walk(folder):
-                    filepaths.extend([os.path.join(root, filename) for filename in filenames if filename.endswith('.pssession')])
+                    filepaths.extend([os.path.join(root, filename) for filename in filenames if filename.endswith('.pssession') or filename.endswith('.pst')])
         if individual_files:
-            filepaths.extend([file for file in individual_files if file.endswith('.pssession')])
+            filepaths.extend([file for file in individual_files if file.endswith('.pssession') or file.endswith('.pst')])
 
         space_id = self.canvas.selected_space_id
         if len(self.canvas.dataspaces[space_id]["datasets"]) > 0:
             ret = self.msg_box_overwrite(space_id)
             if ret == 1:
-                self.handle_pssession_data(sorted(filepaths))
+                self.handle_pssession_pst_data(sorted(filepaths))
 
 
     def closeEvent(self, event):
@@ -226,15 +221,11 @@ class MyMainWindow(QMainWindow):
                 "space_widget_id": self.space_widget_id,
                 "set_widget_id": self.set_widget_id,
                 "current_convert_value": self.lineEdit_convert_current.text()
-                #"active_spaces_ids": self.canvas.active_spaces_ids
-                #"layout_datasets": self.layout_datasets,
-                #"widgets": self.widgets
             },
             "plot": {
                 "show_debug_info": self.canvas.show_debug_info,
                 "show_legend": self.canvas.show_legend,
                 "show_equation": self.canvas.show_equation,
-                #"span": self.canvas.span,
                 "span_initialized": self.canvas.span_initialized,
                 "selected_space_id": self.canvas.selected_space_id,
                 "active_spaces_ids": self.canvas.active_spaces_ids,
@@ -279,18 +270,14 @@ class MyMainWindow(QMainWindow):
 
             space_widget_id = data["window"]["space_widget_id"]
             set_widget_id = data["window"]["set_widget_id"]
-            #toggled_on_space_ids = data["window"]["toggled_on_space_ids"]
 
             self.canvas.show_debug_info = data["plot"]["show_debug_info"]
             self.canvas.show_legend = data["plot"]["show_legend"]
             self.canvas.show_equation = data["plot"]["show_equation"]
-            #self.canvas.span_initialized = data["plot"]["span_initialized"]
             selected_space_id = data["plot"]["selected_space_id"]
             active_spaces_ids = data["plot"]["active_spaces_ids"]
             dataspaces = data["plot"]["dataspaces"]
             self.canvas.color_index = data["plot"]["color_index"]
-            #self.canvas.unit_current = data["plot"]["unit_current"]
-            #self.canvas.unit_concentration = data["plot"]["unit_concentration"]
 
             # Reconstruct data and gui
             for space_id, dataspace in dataspaces.items():
@@ -335,7 +322,8 @@ class MyMainWindow(QMainWindow):
                         times=times, 
                         currents=currents, 
                         concentration=concentration, 
-                        notes=notes, update_plot=False, 
+                        notes=notes, 
+                        update_plot=False, 
                         space_id=space_id, 
                         hidden=hidden, 
                         color=color
@@ -384,8 +372,7 @@ class MyMainWindow(QMainWindow):
             
             concentrations, calculated_currents = zip(*result)
             avg_currents, _ = zip(*calculated_currents) 
-            _, _, _, trendline = self.canvas.calculate_trendline(concentrations, avg_currents)
-            #print(trendline)     
+            _, _, _, trendline = self.canvas.calculate_trendline(concentrations, avg_currents)   
         except Exception as e:
             print(e)
             traceback.print_exc()
@@ -421,7 +408,6 @@ class MyMainWindow(QMainWindow):
         checkbox_toggle_space = QCheckBox(self)
         checkbox_toggle_space.setChecked(space_toggled_on)
         checkbox_toggle_space.stateChanged.connect(lambda: self.set_active_dataspaces())
-        #checkbox_toggle_space.setFixedHeight(15)
 
         button_space = EditableButton(space_name, self)
         button_space.clicked.connect(lambda: self.switch_dataspace(space_id))
@@ -437,8 +423,6 @@ class MyMainWindow(QMainWindow):
 
         self.layout_dataspaces.addLayout(hbox)
         self.layout_dataspaces.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        #self.verticalLayout_dataspaces.setContentsMargins(0, 0, 0, 0)
-        #self.verticalLayout_dataspaces.setSpacing(0)
 
         # Store references to the widgets for later access
         self.widgets[space_id] = { 
@@ -480,7 +464,6 @@ class MyMainWindow(QMainWindow):
         self.find_concentration_from_current(self.lineEdit_convert_current.text())
 
         # Show dataset widgets that are in current dataspace only
-        #dataset_widgets = self.widgets[space_id]["dataset_widgets"]
         for widgets in self.widgets.values(): 
             for dataset_widgets in widgets["dataset_widgets"].values():
                 for dataset_widget in dataset_widgets.values():
@@ -579,10 +562,6 @@ class MyMainWindow(QMainWindow):
             checkbox_toggle_active.setChecked(True)
         checkbox_toggle_active.stateChanged.connect(lambda: self.toggle_dataset(set_id))
 
-        # Connect "paste data "button to handle_clipboard_data function
-        #button_paste = QPushButton("Paste Data", self)
-        #button_paste.clicked.connect(lambda: self.handle_clipboard_data(set_id))
-
         hbox = QHBoxLayout()
         hbox.addWidget(checkbox_toggle_active)
         hbox.addWidget(line_edit_name)
@@ -598,8 +577,7 @@ class MyMainWindow(QMainWindow):
             "checkbox_toggle": checkbox_toggle_active,
             "line_edit_name": line_edit_name,
             "line_edit_concentration": line_edit_concentration,
-            "line_edit_notes": line_edit_notes#,
-            #"button_paste": button_paste
+            "line_edit_notes": line_edit_notes
         }
 
         if not space_id in self.widgets:
@@ -635,11 +613,6 @@ class MyMainWindow(QMainWindow):
         dataset = self.canvas.dataspaces[space_id]["datasets"][set_id]
         dataset["hidden"] = not dataset["hidden"]
         self.canvas.draw_plot()
-        
-        #if widget.isEnabled():
-        #    self.canvas.unhide_dataset(set_id)
-        #else:
-        #    self.canvas.hide_dataset(set_id)
 
         self.setFocus() # Prevent setting focus to next widget
 
@@ -661,7 +634,6 @@ class MyMainWindow(QMainWindow):
         name, concentration, notes = self.get_widgets_text(id)
         if self.concentration_input_is_valid(id, concentration):
             self.canvas.update_dataset(id, name, concentration, notes, update_plot)
-        #self.setFocus() # Unfocus from widget
 
 
     def get_widgets_text(self, set_id):
@@ -673,29 +645,6 @@ class MyMainWindow(QMainWindow):
         notes = dataset_widgets["line_edit_notes"].text()
 
         return name, concentration, notes
-
-
-    def handle_clipboard_data(self, id):
-        # Read data from clipboard
-        clipboard_data = pyperclip.paste()
-
-        if not clipboard_data:
-            QMessageBox.warning(self, "No Data", "Clipboard does not contain any data.")
-            return
-        
-        # Parse clipboard data into a DataFrame
-        try:    
-            data_frame = pd.read_csv(StringIO(clipboard_data), sep='\t')
-            times = data_frame['time/s'].tolist()
-            currents = data_frame['current/µA'].tolist()
-        except Exception as e: 
-            QMessageBox.warning(self, "Data in wrong format", f"No \"{e}\" found in clipboard")
-            return
-        
-        name, concentration, notes = self.get_widgets_text(id)
-        self.canvas.add_dataset(id, name, "DATASPACE0", times, currents, concentration, notes)
-
-        print(currents)
 
 
     def on_import_data_from_csv_clicked(self):
@@ -710,6 +659,8 @@ class MyMainWindow(QMainWindow):
 
 
     def handle_csv_data(self, filenames):
+        # Doesnt work anymore. Fix later maybe
+
         # Read the CSV file into a DataFrame
         data_frame = pd.read_csv(filenames[0], encoding="utf-16", header=5)
         data_frame = data_frame.dropna()
@@ -725,21 +676,22 @@ class MyMainWindow(QMainWindow):
             self.canvas.add_dataset(id, name, times, currents, concentration, notes)
 
 
-    def on_import_data_from_pssession_clicked(self):
+    def on_import_data_from_pssession_pst_clicked(self):
         dialog = QFileDialog(self)
         dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        dialog.setNameFilter("PSSESSION (*.pssession)")
+        dialog.setNameFilter("PSSESSION (*.pssession); PST (*.pst)")
         if not dialog.exec():
             # If user closes file picker
             return
         
         filepaths = dialog.selectedFiles()
-        #print("Selected file:", filepaths)
+        print("Selected file:", filepaths)
         space_id = self.canvas.selected_space_id
         if len(self.canvas.dataspaces[space_id]["datasets"]) > 0:
             ret = self.msg_box_overwrite(space_id)
             if ret == 1:
-                self.handle_pssession_data(filepaths)
+                self.handle_pssession_pst_data(filepaths)
+
 
     def msg_box_overwrite(self, space_id):
             msgBox = QMessageBox()
@@ -748,7 +700,6 @@ class MyMainWindow(QMainWindow):
             msgBox.setStandardButtons(QMessageBox.StandardButton.Yes | 
                                       QMessageBox.StandardButton.No | 
                                       QMessageBox.StandardButton.Cancel)
-            #msgBox.setDefaultButton(QMessageBox.Yes)
             ret = msgBox.exec()
 
             if ret == QMessageBox.StandardButton.Cancel:
@@ -757,25 +708,27 @@ class MyMainWindow(QMainWindow):
             elif ret == QMessageBox.StandardButton.Yes:
                 # Delete widgets
                 set_ids = list(self.widgets[space_id]["dataset_widgets"].keys())
-                #print(set_ids)
                 for set_id in set_ids:
                     self.delete_dataset_widget(set_id)
-                # Delete existing dataspace
-                #self.canvas.delete_dataspace()
+                # Delete all datasets within current dataspace
                 self.canvas.dataspaces[self.canvas.selected_space_id]["datasets"] = {}
                 return 1
             elif ret == QMessageBox.StandardButton.No:
                 return 1
                 
-    def handle_pssession_data(self, filepaths):
+    def handle_pssession_pst_data(self, filepaths):
         for filepath in filepaths:
-            with open(filepath, encoding="utf-16-le") as f:
-                data = f.read()
-                data = data.replace("\ufeff", "")
-                json_data = json.loads(data)
-
-            times = self.extract_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayTime")
-            currents = self.extract_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayCurrents")
+            if os.path.splitext(filepath)[1] == ".pssession":
+                with open(filepath, encoding="utf-16-le") as f:
+                    data = f.read()
+                    data = data.replace("\ufeff", "")
+                    json_data = json.loads(data)
+                times = self.extract_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayTime")
+                currents = self.extract_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayCurrents")
+            elif os.path.splitext(filepath)[1] == ".pst":
+                with open(filepath, encoding="utf-8") as f:
+                    data = f.read()
+                    times, currents = self.extract_pst_data(data)
 
             # Attempt extracting directory + channel name from file name             
             try:         
@@ -794,6 +747,24 @@ class MyMainWindow(QMainWindow):
             self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", "", times, currents, concentration, notes, update_plot=False)
         self.canvas.draw_plot()
 
+
+    def extract_pst_data(self, data: str):
+        times = []
+        currents = []
+
+        for line in data.split("\n"):
+            print(line)
+            if line.strip():
+                values = line.split(sep=" ")
+                # Ignore lines that dont start with numerical values
+                try: 
+                    float(values[0])
+                except ValueError:
+                    continue
+
+                times.append(float(values[0]))
+                currents.append(float(values[1]))
+        return times, currents
 
     def extract_pssession_data_by_type(self, data, target_type):
         # The json is capitalized in newer pssession files
@@ -894,7 +865,6 @@ class EditableButton(QPushButton):
         self.line_edit.selectAll()
         self.line_edit.setFocus()
         self.line_edit.editingFinished.connect(self.finish_editing)
-        #self.line_edit.textChanged.connect(self.textChanged.emit)
         self.line_edit.setGeometry(self.rect())
         self.line_edit.show()
         self.line_edit.installEventFilter(self)
@@ -916,7 +886,6 @@ class EditableButton(QPushButton):
 
 
 class PlotCanvas(FigureCanvas):
-    # For type hints
     figure: plt.Figure
     axes1: Axes
     axes2: Axes
@@ -976,7 +945,6 @@ class PlotCanvas(FigureCanvas):
         self.figure, (self.axes1, self.axes2) = plt.subplots(1, 2)
         super().__init__(self.figure)
         self.setParent(parent)
-        #self.figure.tight_layout()
 
         # Create color table
         tableau_colors = mcolors.TABLEAU_COLORS
@@ -1121,8 +1089,6 @@ class PlotCanvas(FigureCanvas):
         # If no id provided, delete currently selected space
         if space_id == None:
             space_id = self.selected_space_id
-        #print(self.dataspaces.keys())
-        #print(space_id)
         if not space_id in self.dataspaces:
             return
             
@@ -1155,11 +1121,6 @@ class PlotCanvas(FigureCanvas):
         
 
     def plot_results(self): 
-        #if not self.show_results:
-        #    self.axes2.set_visible(False)
-        #    return
-        #self.axes2.set_visible(True)
-
         active_datasets = self.get_datasets_in_active_dataspaces()
         if len(active_datasets) == 0:
             info_text = "No sets enabled"
@@ -1223,18 +1184,11 @@ class PlotCanvas(FigureCanvas):
         self.axes2.set_ylabel(f"current({self.unit_current})")
         self.axes2.set_xlabel(f"concentration({self.unit_concentration})")
         
-        # Set tick locations
-        x_ticks = np.arange(start=min(concentrations), stop=max(concentrations) + 1)
-        #print(concentrations)
-        #print(x_ticks)
         self.axes2.xaxis.set_major_locator(plt.AutoLocator())
-        #self.axes2.xaxis.set_minor_locator(plt.AutoMinorLocator())
         self.axes2.yaxis.set_major_locator(plt.MaxNLocator(10))
 
-        #if len(results) == 1:
         if self.show_debug_info and len(results) == 1:
             self.draw_debug_box(concentrations, avg_currents, std_currents, slope, intercept, trendline)
-            #print(sorted_concentration_data)
     
 
     def display_results_info_text(self, text):
@@ -1275,7 +1229,6 @@ class PlotCanvas(FigureCanvas):
                 concentration_data[concentration].append(avg_current)
             else:
                 concentration_data[concentration] = [avg_current]
-        #print(f"RAW: {concentration_data}")
         
         # Calculate average of average currents for each concentration
         for concentration, currents_list in concentration_data.items():
@@ -1287,13 +1240,6 @@ class PlotCanvas(FigureCanvas):
 
 
     def plot_data(self):
-        #if not self.show_data:
-        #   self.axes1.set_visible(False)
-        #   self.axes1.set_axis_off()
-        #   self.figure.delaxes(self.axes1)
-        #    return
-        #self.axes1.set_visible(True)
-
         # Clear existing plot
         self.axes1.clear()
 
@@ -1301,7 +1247,6 @@ class PlotCanvas(FigureCanvas):
         if datasets == None:
             self.axes1.grid(True)
             self.draw()
-            #print("no datasets")
             return
         
         # Plot each dataset      
@@ -1384,14 +1329,13 @@ class PlotCanvas(FigureCanvas):
         self.figure.tight_layout()
 
     def on_pick(self, event):
-        print(event.artist)
-        
+        # Copy equation to clipboard on click
         artist: plt.Text = event.artist
         text = artist.get_text()
         QApplication.clipboard().setText(text)
 
-        old_alpha = artist.get_bbox_patch().get_alpha()
-
+        # Flash equation box for feedback
+        old_alpha = artist.get_bbox_patch().get_alpha() 
         artist.get_bbox_patch().set_alpha(0.7)
         self.draw()
         
