@@ -146,12 +146,14 @@ class MyMainWindow(QMainWindow):
         space_id = self.canvas.selected_space_id
         if space_id not in self.canvas.dataspaces:
             self.add_dataspace_widget(space_id=space_id, initialize_dataset=False)
+            self.handle_pssession_pst_data(sorted(filepaths))
         else: 
             if len(self.canvas.dataspaces[space_id]["datasets"]) > 0:
                 ret = self.msg_box_overwrite(space_id)
                 if ret == 1:
                     self.handle_pssession_pst_data(sorted(filepaths))
-        self.handle_pssession_pst_data(sorted(filepaths))
+            else:
+                self.handle_pssession_pst_data(sorted(filepaths))
 
 
     def closeEvent(self, event):
@@ -230,6 +232,7 @@ class MyMainWindow(QMainWindow):
                 "show_debug_info": self.canvas.show_debug_info,
                 "show_legend": self.canvas.show_legend,
                 "show_equation": self.canvas.show_equation,
+                "span_initialized": self.canvas.span_initialized,
                 "span_extents": self.canvas.span.extents,
                 "selected_space_id": self.canvas.selected_space_id,
                 "active_spaces_ids": self.canvas.active_spaces_ids,
@@ -284,7 +287,6 @@ class MyMainWindow(QMainWindow):
             self.canvas.color_index = data["plot"]["color_index"]
 
             # Reconstruct data and gui
-            smallest_times_set = None # For span initialization
             for space_id, dataspace in dataspaces.items():
                 space_name = dataspace["name"]
                 space_notes = dataspace["notes"]
@@ -334,10 +336,6 @@ class MyMainWindow(QMainWindow):
                         color=color
                     )
 
-                    if smallest_times_set == None or times[-1] < smallest_times_set[-1]:
-                        smallest_times_set = times
-                    print(smallest_times_set[-1]) 
-
             self.space_widget_id = space_widget_id
             self.set_widget_id = set_widget_id
 
@@ -352,9 +350,9 @@ class MyMainWindow(QMainWindow):
             self.set_current_unit(data["plot"]["unit_current"])
             self.set_concentration_unit(data["plot"]["unit_concentration"])
             
-            self.canvas.span_initialized = False      
-            self.canvas.draw_plot()  
-            self.canvas.span.extents = data["plot"]["span_extents"]      
+            self.canvas.span_initialized = data["plot"]["span_initialized"]  
+            self.canvas.span.extents = data["plot"]["span_extents"]
+            self.canvas.draw_plot()         
 
             print("File loaded from:", filepath)
         except Exception as e:
@@ -707,7 +705,8 @@ class MyMainWindow(QMainWindow):
                 ret = self.msg_box_overwrite(space_id)
                 if ret == 1:
                     self.handle_pssession_pst_data(sorted(filepaths))
-        self.handle_pssession_pst_data(sorted(filepaths))
+            else:
+                self.handle_pssession_pst_data(sorted(filepaths))
 
 
     def msg_box_overwrite(self, space_id):
@@ -1010,11 +1009,14 @@ class PlotCanvas(FigureCanvas):
             self.draw_plot()
 
 
-    def initialize_span(self, times):  
+    def initialize_span(self, times, extents: tuple[int, int] = None):  
         self.create_span_selector(np.array(times))
-        span_right = times[-1]
-        span_left = round(float(span_right) * 0.9, ndigits=1)
-        self.span.extents = (span_left, span_right)
+        if extents == None:
+            span_right = times[-1]
+            span_left = round(float(span_right) * 0.9, ndigits=1)
+            self.span.extents = (span_left, span_right)   
+        else:
+            self.span.extents = extents
         self.span_initialized = True
 
 
@@ -1030,6 +1032,22 @@ class PlotCanvas(FigureCanvas):
             ignore_event_outside=True, # Keep the span displayed after interaction
             grab_range=6,
             snap_values=snaps) # Snap to time values  
+        
+    def get_smallest_times_dataset(self):
+        active_datasets = self.get_datasets_in_active_dataspaces()
+        if len(active_datasets) == 0:
+            return
+        
+        smallest_times_set = []
+        for dataset in active_datasets:
+            for data in dataset.values():
+                if data["hidden"]:
+                    continue
+                times = data["times"]
+                if len(smallest_times_set) == 0 or smallest_times_set[-1] > times[-1]:
+                    smallest_times_set = times
+        if smallest_times_set[-1] != self.span.snap_values[-1]:
+            self.initialize_span(smallest_times_set)
 
 
     def update_dataset(self, set_id, name, concentration, notes, update_plot = True):
@@ -1286,18 +1304,21 @@ class PlotCanvas(FigureCanvas):
         self.axes1.xaxis.set_major_locator(plt.MaxNLocator(10))
         self.axes1.yaxis.set_major_locator(plt.MaxNLocator(10))
 
-        if not self.span_initialized or self.span.extents[1] > times[-1]: 
+        if not self.span_initialized: 
             self.initialize_span(times)
             print("span initialized")
 
 
     def draw_plot(self):    
         self.plot_data()
+        smallest_times_set = self.get_smallest_times_dataset()
+        if smallest_times_set != None and smallest_times_set[-1] > self.span.snap_values[-1]:
+            self.initialize_span(smallest_times_set)
         self.plot_results()
         self.figure.tight_layout()
         self.draw()
-        print(f"draw_plot called")     
-    
+        print(f"draw_plot called")
+
 
     def draw_debug_box(self, concentrations, avg_currents, std_currents, slope, intercept, trendline):
         concentrations_text = f"CONCENTRATIONS: {concentrations}"
@@ -1367,7 +1388,6 @@ def main():
     window = MyMainWindow()
     window.setWindowTitle("Amp Analyzer")
     window.show()
-    #app.processEvents()  
     window.on_load_clicked(ask_for_file_location=False)
     sys.exit(app.exec()) 
 
