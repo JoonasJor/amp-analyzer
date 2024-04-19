@@ -144,10 +144,14 @@ class MyMainWindow(QMainWindow):
             filepaths.extend([file for file in individual_files if file.endswith('.pssession') or file.endswith('.pst')])
 
         space_id = self.canvas.selected_space_id
-        if len(self.canvas.dataspaces[space_id]["datasets"]) > 0:
-            ret = self.msg_box_overwrite(space_id)
-            if ret == 1:
-                self.handle_pssession_pst_data(sorted(filepaths))
+        if space_id not in self.canvas.dataspaces:
+            self.add_dataspace_widget(space_id=space_id, initialize_dataset=False)
+        else: 
+            if len(self.canvas.dataspaces[space_id]["datasets"]) > 0:
+                ret = self.msg_box_overwrite(space_id)
+                if ret == 1:
+                    self.handle_pssession_pst_data(sorted(filepaths))
+        self.handle_pssession_pst_data(sorted(filepaths))
 
 
     def closeEvent(self, event):
@@ -226,7 +230,7 @@ class MyMainWindow(QMainWindow):
                 "show_debug_info": self.canvas.show_debug_info,
                 "show_legend": self.canvas.show_legend,
                 "show_equation": self.canvas.show_equation,
-                "span_initialized": self.canvas.span_initialized,
+                "span_extents": self.canvas.span.extents,
                 "selected_space_id": self.canvas.selected_space_id,
                 "active_spaces_ids": self.canvas.active_spaces_ids,
                 "dataspaces": self.canvas.dataspaces,
@@ -280,6 +284,7 @@ class MyMainWindow(QMainWindow):
             self.canvas.color_index = data["plot"]["color_index"]
 
             # Reconstruct data and gui
+            smallest_times_set = None # For span initialization
             for space_id, dataspace in dataspaces.items():
                 space_name = dataspace["name"]
                 space_notes = dataspace["notes"]
@@ -329,9 +334,12 @@ class MyMainWindow(QMainWindow):
                         color=color
                     )
 
+                    if smallest_times_set == None or times[-1] < smallest_times_set[-1]:
+                        smallest_times_set = times
+                    print(smallest_times_set[-1]) 
+
             self.space_widget_id = space_widget_id
             self.set_widget_id = set_widget_id
-            self.canvas.span_initialized = False
 
             self.lineEdit_convert_current.setText(data["window"]["current_convert_value"])
             self.actionDebug_Info.setChecked(self.canvas.show_debug_info)
@@ -343,8 +351,10 @@ class MyMainWindow(QMainWindow):
 
             self.set_current_unit(data["plot"]["unit_current"])
             self.set_concentration_unit(data["plot"]["unit_concentration"])
-
-            self.canvas.draw_plot()        
+            
+            self.canvas.span_initialized = False      
+            self.canvas.draw_plot()  
+            self.canvas.span.extents = data["plot"]["span_extents"]      
 
             print("File loaded from:", filepath)
         except Exception as e:
@@ -426,6 +436,7 @@ class MyMainWindow(QMainWindow):
 
         # Store references to the widgets for later access
         self.widgets[space_id] = { 
+            "dataspace_name": space_name,
             "dataspace_widgets": {
                 "checkbox_toggle": checkbox_toggle_space,
                 "button_space": button_space
@@ -433,11 +444,12 @@ class MyMainWindow(QMainWindow):
             "dataset_widgets": {}
         }
 
+        #self.switch_dataspace(space_id)
         # Initialize every space with one dataset
         if initialize_dataset:   
             self.switch_dataspace(space_id)
             set_id = self.add_dataset_widget()
-            set_name, concentration, notes = self.get_widgets_text(set_id)
+            _, set_name, concentration, notes = self.get_widgets_text(set_id)
             times = np.arange(0, 100.1, 0.1)
             currents = np.linspace(-15, -5, len(times))
             self.set_active_dataspaces()
@@ -533,7 +545,7 @@ class MyMainWindow(QMainWindow):
         if space_id == None: 
             space_id = self.canvas.selected_space_id
 
-        print(space_id)
+        #print(f"add_dataset_widget: space_id {space_id}")
         
         line_edit_name = QLineEdit(self)
         if name == None:
@@ -631,20 +643,20 @@ class MyMainWindow(QMainWindow):
 
 
     def update_dataset_info(self, id, update_plot = True):
-        name, concentration, notes = self.get_widgets_text(id)
+        _, name, concentration, notes = self.get_widgets_text(id)
         if self.concentration_input_is_valid(id, concentration):
             self.canvas.update_dataset(id, name, concentration, notes, update_plot)
 
 
     def get_widgets_text(self, set_id):
         space_id = self.canvas.selected_space_id
+        space_name = self.widgets[space_id]["dataspace_name"]
         dataset_widgets = self.widgets[space_id]["dataset_widgets"][set_id]
-
-        name = dataset_widgets["line_edit_name"].text()
+        set_name = dataset_widgets["line_edit_name"].text()
         concentration = dataset_widgets["line_edit_concentration"].text()
         notes = dataset_widgets["line_edit_notes"].text()
 
-        return name, concentration, notes
+        return space_name, set_name, concentration, notes
 
 
     def on_import_data_from_csv_clicked(self):
@@ -679,18 +691,23 @@ class MyMainWindow(QMainWindow):
     def on_import_data_from_pssession_pst_clicked(self):
         dialog = QFileDialog(self)
         dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        dialog.setNameFilter("PSSESSION (*.pssession); PST (*.pst)")
+        dialog.setNameFilters(["PSSESSION (*.pssession)", "PST (*.pst)"])
         if not dialog.exec():
             # If user closes file picker
             return
         
         filepaths = dialog.selectedFiles()
         print("Selected file:", filepaths)
+
         space_id = self.canvas.selected_space_id
-        if len(self.canvas.dataspaces[space_id]["datasets"]) > 0:
-            ret = self.msg_box_overwrite(space_id)
-            if ret == 1:
-                self.handle_pssession_pst_data(filepaths)
+        if space_id not in self.canvas.dataspaces:
+            self.add_dataspace_widget(space_id=space_id, initialize_dataset=False)
+        else: 
+            if len(self.canvas.dataspaces[space_id]["datasets"]) > 0:
+                ret = self.msg_box_overwrite(space_id)
+                if ret == 1:
+                    self.handle_pssession_pst_data(sorted(filepaths))
+        self.handle_pssession_pst_data(sorted(filepaths))
 
 
     def msg_box_overwrite(self, space_id):
@@ -743,8 +760,8 @@ class MyMainWindow(QMainWindow):
                 print(e)
 
             set_id = self.add_dataset_widget(set_name)
-            _, concentration, notes = self.get_widgets_text(set_id)
-            self.canvas.add_dataset(set_id, set_name, "DATASPACE 0", "", times, currents, concentration, notes, update_plot=False)
+            dataspace_name, _, concentration, notes = self.get_widgets_text(set_id)
+            self.canvas.add_dataset(set_id, set_name, dataspace_name, "", times, currents, concentration, notes, update_plot=False)
         self.canvas.draw_plot()
 
 
@@ -753,7 +770,7 @@ class MyMainWindow(QMainWindow):
         currents = []
 
         for line in data.split("\n"):
-            print(line)
+            #print(line)
             if line.strip():
                 values = line.split(sep=" ")
                 # Ignore lines that dont start with numerical values
@@ -987,10 +1004,18 @@ class PlotCanvas(FigureCanvas):
 
 
     def on_move_span(self, vmin, vmax):
-        print("span:", self.span.extents)
+        #print("span:", self.span.extents)
         datasets = self.get_datasets()
         if len(datasets) > 1: 
             self.draw_plot()
+
+
+    def initialize_span(self, times):  
+        self.create_span_selector(np.array(times))
+        span_right = times[-1]
+        span_left = round(float(span_right) * 0.9, ndigits=1)
+        self.span.extents = (span_left, span_right)
+        self.span_initialized = True
 
 
     def create_span_selector(self, snaps):
@@ -1056,12 +1081,10 @@ class PlotCanvas(FigureCanvas):
         # Add dataset to dataspace
         datasets[set_id] = dataset
 
-        if not self.span_initialized: 
-            self.initialize_span(times)
         if update_plot:
             self.draw_plot()
 
-        print(self.dataspaces[self.selected_space_id]["name"])
+        #print(self.dataspaces[self.selected_space_id]["name"])
 
 
     def get_datasets(self, space_id: int = None):
@@ -1098,7 +1121,6 @@ class PlotCanvas(FigureCanvas):
 
     
     def rename_dataspace(self, space_id, name):
-        print(space_id) 
         # Rename
         if space_id in self.dataspaces:
             self.dataspaces[space_id]["name"] = name
@@ -1109,15 +1131,6 @@ class PlotCanvas(FigureCanvas):
         if self.show_legend:
             self.axes2.legend(labels)
         self.draw()
-
-
-    def initialize_span(self, times):  
-        self.create_span_selector(np.array(times)) # Time values from first dataset
-        last_value = times[-1]
-        span_right = last_value
-        span_left = round(float(last_value) * 0.9, ndigits=1)
-        self.span.extents = (span_left, span_right)
-        self.span_initialized = True
         
 
     def plot_results(self): 
@@ -1273,6 +1286,10 @@ class PlotCanvas(FigureCanvas):
         self.axes1.xaxis.set_major_locator(plt.MaxNLocator(10))
         self.axes1.yaxis.set_major_locator(plt.MaxNLocator(10))
 
+        if not self.span_initialized or self.span.extents[1] > times[-1]: 
+            self.initialize_span(times)
+            print("span initialized")
+
 
     def draw_plot(self):    
         self.plot_data()
@@ -1310,7 +1327,6 @@ class PlotCanvas(FigureCanvas):
         self.plot_legend = self.axes1.legend(loc="lower left", fontsize=9)
         legend_height = self.plot_legend.get_window_extent().max[1]
         plot_height = self.height()
-        print(legend_height, plot_height)
         if legend_height > plot_height - 30:
             self.plot_legend.remove()
 
