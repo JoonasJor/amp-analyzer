@@ -5,6 +5,7 @@ Process and analyze large sets of chronoamperometry measurements quick and easy
 
 ### Features:  
 -Import data from .pssession and .pst files  
+-Drag and drop multiple folders for quick data importing  
 -Select time range used for trendline calculations visually in the plot  
 -Support for multiple sets of measurements  
 -Quick concentration inputting with arrow keys + ctrl  
