@@ -31,7 +31,6 @@ class PlotCanvas(FigureCanvas):
     # Contains data and data operations
     data_handler: PlotDataHandler
 
-
     def __init__(self, parent=None): 
         self.figure, (self.axes1, self.axes2) = plt.subplots(1, 2)
         super().__init__(self.figure)
@@ -54,32 +53,6 @@ class PlotCanvas(FigureCanvas):
         self.show_equation = not self.show_equation
         self.draw_plot()
         print(f"show equation: {self.show_equation}")
-
-    def on_move_span(self, vmin, vmax):
-        self.data_handler.time_range = (vmin, vmax)
-        self.draw_plot()
-
-    def create_span_selector(self, times, extents: tuple[int, int] = None):  
-        self.span = SpanSelector(
-            self.axes1, 
-            self.on_move_span,
-            'horizontal', 
-            useblit=True, # For faster canvas updates
-            interactive=True, # Allow resizing by dragging from edges
-            drag_from_anywhere=True, # Allow moving by dragging
-            props=dict(alpha=0.2, facecolor="tab:blue"), # Visuals
-            ignore_event_outside=True, # Keep the span displayed after interaction
-            grab_range=6,
-            snap_values=times) # Snap to time values 
-        
-        if extents == None:
-            span_right = times[-1]
-            span_left = round(float(span_right) * 0.9, ndigits=1)
-            self.span.extents = (span_left, span_right)   
-        else:
-            self.span.extents = extents
-        self.span_initialized = True
-        self.data_handler.time_range = self.span.extents
 
     def plot_data(self):
         # Clear existing plot
@@ -117,7 +90,7 @@ class PlotCanvas(FigureCanvas):
         self.axes1.yaxis.set_major_locator(plt.MaxNLocator(10))
 
         if not self.span_initialized: 
-            self.create_span_selector(times)
+            self.create_span_selector(np.array(times))
             print("span initialized")
 
     def plot_results(self): 
@@ -197,21 +170,74 @@ class PlotCanvas(FigureCanvas):
         self.axes2.set_xlabel(f"concentration({self.unit_concentration})")
         self.axes2.text(0.5, 0.5, text, fontsize=10, horizontalalignment="center", verticalalignment="center", transform=self.axes2.transAxes)
 
-    def draw_plot(self):    
+    def draw_plot(self):
+        self.handle_span_selector()
         self.plot_data()
-        self.check_span_selector_snaps()
         self.plot_results()
         self.figure.tight_layout()
         self.draw()
         print(f"draw_plot called")
 
-    def check_span_selector_snaps(self):
+    def handle_span_selector(self):
+        if not self.span:
+            return
+        
+        self.set_span_visibility()
         smallest_times_set = self.data_handler.get_smallest_times_dataset()
         if len(smallest_times_set) == 0:
             return
         
+        print(f"smallest_times_set[-1]: {smallest_times_set[-1]}")
+        print(f"self.span.snap_values[-1]: {self.span.snap_values[-1]}")
+        
+        # Depending on current snap values and span selection, recreate span
         if smallest_times_set[-1] < self.span.snap_values[-1]:
-            self.create_span_selector(smallest_times_set)
+            if smallest_times_set[-1] >= self.span.extents[1]:
+                self.create_span_selector(np.array(smallest_times_set), self.span.extents)
+            else:
+                self.create_span_selector(np.array(smallest_times_set))
+        elif smallest_times_set[-1] > self.span.snap_values[-1]:
+            self.create_span_selector(np.array(smallest_times_set), self.span.extents)
+
+    def on_move_span(self, vmin, vmax):   
+        self.data_handler.time_range = (vmin, vmax)
+        print(vmin, vmax)
+        self.plot_results()
+        #self.set_span_visibility()
+        self.draw()
+    
+    def set_span_visibility(self):
+        # Hide time span selector if selected plot is not active
+        if self.data_handler.selected_space_id in self.data_handler.active_spaces_ids:
+            self.span.set_visible(True)
+            self.span.set_active(True)
+        else:
+            self.span.set_visible(False)
+            self.span.set_active(False)
+
+    def create_span_selector(self, times, extents: tuple[int, int] = None):  
+        self.span = SpanSelector(
+            self.axes1, 
+            self.on_move_span,
+            'horizontal', 
+            useblit=True, # For faster canvas updates
+            interactive=True, # Allow resizing by dragging from edges
+            drag_from_anywhere=True, # Allow moving by dragging
+            props=dict(alpha=0.2, facecolor="tab:blue"), # Visuals
+            ignore_event_outside=True, # Keep the span displayed after interaction
+            grab_range=6,
+            snap_values=times) # Snap to time values 
+        
+        if extents == None:
+            span_right = times[-1]
+            span_left = round(float(span_right) * 0.9, ndigits=1)
+            self.span.extents = (span_left, span_right)   
+        else:
+            self.span.extents = extents
+        self.span_initialized = True
+        self.data_handler.time_range = self.span.extents
+        self.span.set_active(True)
+        print("span created") 
 
     def draw_debug_box(self, concentrations, avg_currents, std_currents, slope, intercept, trendline):
         concentrations_text = f"CONCENTRATIONS: {concentrations}"

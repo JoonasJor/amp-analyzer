@@ -394,9 +394,9 @@ class MainWindow(QMainWindow):
         else:
             concentration_text = str(round(concentration, 5))
 
-        print("Min concentration:", min(concentrations))
-        print("Max concentration:", max(concentrations))
-        print("Interpolated concentration:", concentration)
+        #print("Min concentration:", min(concentrations))
+        #print("Max concentration:", max(concentrations))
+        #print("Interpolated concentration:", concentration)
 
         # Update widget
         self.lineEdit_convert_concentration.setText(concentration_text)
@@ -437,8 +437,6 @@ class MainWindow(QMainWindow):
             "dataset_widgets": {}
         }
 
-        #self.switch_dataspace(space_id)
-        # Initialize every space with one dataset
         if initialize_dataset:   
             self.switch_dataspace(space_id)
             set_id = self.add_dataset_widget()
@@ -679,10 +677,11 @@ class MainWindow(QMainWindow):
                 self.handle_pssession_pst_data(sorted(filepaths))
 
     def handle_pssession_pst_data(self, filepaths):
-        times, currents, set_name = do.extract_pssession_pst_data_from_file(filepaths)
-        set_id = self.add_dataset_widget(set_name)
-        dataspace_name, _, concentration, notes = self.get_widgets_text(set_id)
-        self.plot.data_handler.add_dataset(set_id, set_name, dataspace_name, "", times, currents, concentration, notes)
+        for filepath in filepaths:
+            times, currents, set_name = do.extract_pssession_pst_data_from_file(filepath)
+            set_id = self.add_dataset_widget(set_name)
+            dataspace_name, _, concentration, notes = self.get_widgets_text(set_id)
+            self.plot.data_handler.add_dataset(set_id, set_name, dataspace_name, "", times, currents, concentration, notes)
         self.plot.draw_plot()
 
     def msg_box_overwrite(self, space_id):

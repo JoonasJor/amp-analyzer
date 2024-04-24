@@ -18,31 +18,30 @@ def handle_csv_data(self, filenames):
         currents = data_frame[currents_column].astype(float).tolist()
         self.canvas.add_dataset(id, name, times, currents, concentration, notes)
             
-def extract_pssession_pst_data_from_file(filepaths):
-    for filepath in filepaths:
-        if os.path.splitext(filepath)[1] == ".pssession":
-            with open(filepath, encoding="utf-16-le") as f:
-                data = f.read()
-                data = data.replace("\ufeff", "")
-                json_data = json.loads(data)
-            times = parse_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayTime")
-            currents = parse_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayCurrents")
-        elif os.path.splitext(filepath)[1] == ".pst":
-            with open(filepath, encoding="utf-8") as f:
-                data = f.read()
-                times, currents = parse_pst_data(data)
+def extract_pssession_pst_data_from_file(filepath):
+    if os.path.splitext(filepath)[1] == ".pssession":
+        with open(filepath, encoding="utf-16-le") as f:
+            data = f.read()
+            data = data.replace("\ufeff", "")
+            json_data = json.loads(data)
+        times = parse_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayTime")
+        currents = parse_pssession_data_by_type(json_data, "PalmSens.Data.DataArrayCurrents")
+    elif os.path.splitext(filepath)[1] == ".pst":
+        with open(filepath, encoding="utf-8") as f:
+            data = f.read()
+            times, currents = parse_pst_data(data)
 
-        # Attempt extracting directory + channel name from file name             
-        try:         
-            dir_name = os.path.basename(os.path.dirname(filepath))
-            filename = os.path.splitext(os.path.basename(filepath))[0]
-            channel = filename.split("-")[0]
-            if len(channel) > 1:
-                set_name = f"{dir_name} {channel}"
-            else:
-                set_name = filename
-        except Exception as e:
-            print(e)
+    # Attempt extracting directory + channel name from file name             
+    try:         
+        dir_name = os.path.basename(os.path.dirname(filepath))
+        filename = os.path.splitext(os.path.basename(filepath))[0]
+        channel = filename.split("-")[0]
+        if len(channel) > 1:
+            set_name = f"{dir_name} {channel}"
+        else:
+            set_name = filename
+    except Exception as e:
+        print(e)
 
     return times, currents, set_name
 
