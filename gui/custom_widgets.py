@@ -1,10 +1,73 @@
-from PyQt6.QtWidgets import QLineEdit, QPushButton
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import QLineEdit, QPushButton, QScrollArea
+from PyQt6.QtCore import pyqtSignal, Qt
 
 class CustomQLineEdit(QLineEdit):
+    # Selects all text on mouse click
+    # Allows moving and copying between line edits with arrow keys + ctrl
+    
+    custom_line_edit_sets = {}
+    main_window = None
+
+    def __init__(self, set_index, text, parent=None):
+        super().__init__(text, parent)
+        self.main_window = parent
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+        self.set_index = set_index
+        if set_index not in self.custom_line_edit_sets:
+            self.custom_line_edit_sets[set_index] = []
+        
+        self.custom_line_edit_sets[set_index].append(self)
+
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
         self.selectAll()
+
+    def keyPressEvent(self, event):
+        modifiers = event.modifiers()
+        if event.key() == Qt.Key.Key_Up:
+            if modifiers == Qt.KeyboardModifier.ControlModifier:
+                # Ctrl + Up Arrow
+                self.focusLineEdit(-1, True)
+            elif modifiers == Qt.KeyboardModifier.NoModifier:
+                # Up Arrow
+                self.focusLineEdit(-1, False)
+        elif event.key() == Qt.Key.Key_Down:
+            if modifiers == Qt.KeyboardModifier.ControlModifier:
+                # Ctrl + Down Arrow
+                self.focusLineEdit(1, True)
+            elif modifiers == Qt.KeyboardModifier.NoModifier:
+                # Down Arrow
+                self.focusLineEdit(1, False)
+        else:
+            super().keyPressEvent(event)
+
+
+    def focusLineEdit(self, step: int, copy_text: bool):
+        current_set = self.custom_line_edit_sets[self.set_index]
+        current_index = current_set.index(self)
+        
+        next_index = current_index + step
+        
+        # Check if next_index is out of bounds
+        if next_index >= len(current_set) or next_index < 0:
+            return
+            
+        while not current_set[next_index].isEnabled():
+            next_index += step
+            
+            # Check if next_index is out of bounds
+            if next_index >= len(current_set) or next_index < 0:
+                return
+        
+        next_line_edit: CustomQLineEdit = current_set[next_index]
+        if copy_text:
+            next_line_edit.setText(self.text())
+        next_line_edit.setFocus()
+        next_line_edit.selectAll()
+        
+        scroll_area: QScrollArea = self.main_window.scrollArea_datasets
+        scroll_area.ensureWidgetVisible(next_line_edit)
 
 class EditableButton(QPushButton):
     btnTextEditingFinished = pyqtSignal(str)

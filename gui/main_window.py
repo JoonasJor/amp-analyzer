@@ -538,7 +538,7 @@ class MainWindow(QMainWindow):
         else: 
             line_edit_name.setText(name)
         line_edit_name.setFixedWidth(100)
-        line_edit_concentration = CustomQLineEdit(str(concentration), self)
+        line_edit_concentration = CustomQLineEdit(space_id, str(concentration), self)
         line_edit_concentration.setFixedWidth(50)
         line_edit_notes = QLineEdit(notes, self)
 
@@ -549,7 +549,7 @@ class MainWindow(QMainWindow):
 
         # Update dataset on text edited
         line_edit_name.editingFinished.connect(lambda: self.on_dataset_text_edited(set_id))
-        line_edit_concentration.textEdited.connect(lambda: self.on_dataset_text_edited(set_id))
+        line_edit_concentration.textChanged.connect(lambda: self.on_dataset_text_edited(set_id))
         line_edit_notes.editingFinished.connect(lambda: self.on_dataset_text_edited(set_id, False))
       
         checkbox_toggle_active = QCheckBox(self)
@@ -628,7 +628,7 @@ class MainWindow(QMainWindow):
     def on_dataset_text_edited(self, id, update_plot = True):
         _, name, concentration, notes = self.get_widgets_text(id)
         if self.concentration_input_is_valid(id, concentration):
-            self.plot.data_handler.update_dataset(id, name, concentration, notes, update_plot)
+            self.plot.data_handler.update_dataset(id, name, concentration, notes)
             if update_plot:
                 self.plot.draw_plot()
 
