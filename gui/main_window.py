@@ -1,13 +1,12 @@
 import os
 import traceback
 import numpy as np
-import pickle
 import gui.data_operations as do
 from datetime import datetime
 from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QLineEdit, QHBoxLayout, QMessageBox, QFileDialog, QCheckBox
 from PyQt6.uic import loadUi
 from PyQt6.QtCore import Qt, QFileInfo
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from plotting import plotter
 from utils.repeated_timer import RepeatedTimer
 from gui.custom_widgets import CustomQLineEdit, EditableButton
