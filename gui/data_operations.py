@@ -50,7 +50,6 @@ def parse_pst_data(data: str):
     currents = []
 
     for line in data.split("\n"):
-        #print(line)
         if line.strip():
             values = line.split(sep=" ")
             # Ignore lines that dont start with numerical values
@@ -88,8 +87,7 @@ def parse_pssession_data_by_type(data, target_type):
     for measurement in data[key_measurements]:
         for value in measurement[key_dataset][key_values]:
             if value[key_type] == target_type:
-                datavalues = value[key_datavalues]
-                #print(value['datavalues'])       
+                datavalues = value[key_datavalues] 
     if datavalues is None:
         return
     

@@ -203,7 +203,6 @@ class PlotCanvas(FigureCanvas):
         self.data_handler.time_range = (vmin, vmax)
         print(vmin, vmax)
         self.plot_results()
-        #self.set_span_visibility()
         self.draw()
     
     def set_span_visibility(self):
@@ -222,10 +221,10 @@ class PlotCanvas(FigureCanvas):
             'horizontal', 
             useblit=True, # For faster canvas updates
             interactive=True, # Allow resizing by dragging from edges
-            drag_from_anywhere=True, # Allow moving by dragging
+            drag_from_anywhere=True, # Allow moving by dragging from center
             props=dict(alpha=0.2, facecolor="tab:blue"), # Visuals
-            ignore_event_outside=True, # Keep the span displayed after interaction
-            grab_range=6,
+            ignore_event_outside=True, # Keep the span displayed
+            grab_range=6, # In pixels
             snap_values=times) # Snap to time values 
         
         if extents == None:

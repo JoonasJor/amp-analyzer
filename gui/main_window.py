@@ -53,8 +53,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         loadUi("amp_analyzer.ui", self)
-        # Enable dropping onto the main window
-        self.setAcceptDrops(True)
+        self.setAcceptDrops(True) # Enable dropping onto the main window
 
         self.plot = plotter.PlotCanvas(self.plotWidget)
         layout = QVBoxLayout(self.plotWidget)
@@ -154,9 +153,9 @@ class MainWindow(QMainWindow):
 
         if reply == QMessageBox.StandardButton.Yes:
             self.rt.stop()
-            event.accept()  # Allow the window to close
+            event.accept() # Allow the window to close
         else:
-            event.ignore()  # Ignore the close event
+            event.ignore() # Ignore the close event
 
     def set_concentration_unit(self, unit: str):
         # Reset stylesheet on all buttons
@@ -393,10 +392,6 @@ class MainWindow(QMainWindow):
             concentration_text = "Out Of Range"
         else:
             concentration_text = str(round(concentration, 5))
-
-        #print("Min concentration:", min(concentrations))
-        #print("Max concentration:", max(concentrations))
-        #print("Interpolated concentration:", concentration)
 
         # Update widget
         self.lineEdit_convert_concentration.setText(concentration_text)

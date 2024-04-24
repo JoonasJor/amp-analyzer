@@ -141,20 +141,17 @@ class PlotDataHandler():
         return names
 
     def calculate_trendline(self, x, y):
-        # Perform linear regression to get slope, intercept, and R-squared
         slope, intercept = np.polyfit(x, y, 1)
         r_squared = np.corrcoef(x, y)[0, 1]**2
         trendline = slope * np.array(x) + intercept
         return slope, intercept, r_squared, trendline
 
     def calculate_results(self, datasets: dict):
-        # Iterate over each dataset
         concentration_data = {}
         for data in datasets.values():
             if data["hidden"]:
                 continue
             
-            # Convert lists to numpy arrays
             times = np.array(data["times"])
             currents = np.array(data["currents"])
             concentration = data["concentration"]
