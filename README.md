@@ -1,5 +1,5 @@
 # Chronoamperometry Analyzer
-Process and analyze large sets of chronoamperometry measurements quick and easy
+Process and analyze large sets of chronoamperometry measurements
 
 ![image](https://github.com/JoonasJor/amp_analyzer/assets/25465514/5a81f3f5-1182-49f0-ac1e-d518f92dac6f)
 
